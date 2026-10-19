@@ -103,3 +103,8 @@ test('export/import round trip and demo account', async () => {
   assert.ok(r.body.added >= 2);
   assert.equal((await call('/api/import/json', 'POST', exp)).body.added, 0); // idempotent by ext_id only for detected rows
 });
+
+test('cross-origin writes are rejected', async () => {
+  const r = await fetch(base + '/api/auth/logout', { method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(r.status, 403);
+});

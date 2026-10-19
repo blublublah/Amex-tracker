@@ -102,7 +102,7 @@ export function parseEmail(msg, tz = 'America/New_York') {
   }
 
   // Merchant receipt: use the labelled total when present.
-  const total = hay.match(new RegExp(`(?:order\\s+)?(?:total|amount (?:charged|paid)|you paid)[^$\\d]{0,25}${money}`, 'i')) || hay.match(new RegExp(money));
+  const total = hay.match(new RegExp(`(?<![a-z])(?:order\\s+)?(?:total|amount (?:charged|paid)|you paid)[^$\\d]{0,25}${money}`, 'i')) || hay.match(new RegExp(money));
   if (!total) return null;
   return { ...base, amount: toNum(total[1]), description: `${domain} ${msg.subject}` };
 }

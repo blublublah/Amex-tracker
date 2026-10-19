@@ -29,6 +29,15 @@ app.use((req, res, next) => {
   });
   next();
 });
+// CSRF defence in depth (cookies are SameSite=Lax already): reject cross-origin state-changing requests.
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origin = req.headers.origin;
+  if (origin) {
+    try { if (new URL(origin).host !== req.headers.host) return bad(res, 'Cross-origin request blocked.', 403); } catch { return bad(res, 'Bad origin.', 403); }
+  }
+  next();
+});
 app.use(express.json({ limit: '6mb' }));
 app.use(express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public')));
 
