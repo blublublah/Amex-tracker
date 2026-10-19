@@ -77,5 +77,6 @@ export function localNow(tz, now = new Date()) {
 }
 
 export const isValidTz = (tz) => {
+  if (typeof tz !== 'string' || !tz) return false;
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }
 };

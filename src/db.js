@@ -92,3 +92,8 @@ export const q = {
   all: (sql, ...p) => db.prepare(sql).all(...p),
   run: (sql, ...p) => db.prepare(sql).run(...p),
 };
+
+// Lightweight migrations for columns added after first release.
+for (const sql of ['ALTER TABLE users ADD COLUMN ntfy_topic TEXT']) {
+  try { db.exec(sql); } catch { /* column already exists */ }
+}

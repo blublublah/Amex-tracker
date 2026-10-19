@@ -8,6 +8,7 @@ A web app for Amex Platinum cardmembers to track every statement credit (Resy, l
 |---|---|
 | Per-credit, per-period tracking | Monthly, quarterly, semi-annual and annual calendar periods. Checkbox = "used", or add partial amounts. The Year view shows every period at once and lets you backfill. |
 | Reminders | Daily digest email at your chosen hour and time zone. Lead times per cadence (defaults: monthly 10/4/1 days, quarterly 30/14/7/2, semi-annual 60/30/14/7/2, annual 90/60/30/14/7/2). Never repeats a lead time, never skips one if a day is missed, and warns when enrollment is still required. |
+| Phone push | Optional free [ntfy](https://ntfy.sh) topic in Settings; the same digest arrives as a push notification (`NTFY_SERVER` env to self-host). |
 | Calendar alerts | Private `.ics` feed (Settings) for Google/Apple/Outlook with the same alerts. |
 | Auto-detection | Amex activity **CSV import** (posted credit lines are checked off automatically; qualifying charges go to a confirm list) and optional **Gmail** scanning of Amex alerts and merchant receipts. |
 | Guides | "How to use it" for every credit (on each card and in the Guides tab). |
@@ -39,6 +40,6 @@ Without `SMTP_HOST`, emails are written to `data/outbox.log` so you can see them
 5. Set `SECRET_KEY` (`openssl rand -hex 32`) and keep it; it encrypts Gmail tokens.
 
 ## Security notes
-scrypt password hashes, httpOnly SameSite cookies, strict CSP, rate-limited auth, Gmail refresh tokens encrypted at rest (AES-256-GCM), email bodies never stored. Not built yet: 2FA, email verification at signup.
+scrypt password hashes, httpOnly SameSite cookies, strict CSP, rate-limited auth, Gmail refresh tokens encrypted at rest (AES-256-GCM), email bodies never stored. Not built yet: SMS, 2FA, email verification at signup.
 
 *Independent tool; not affiliated with or endorsed by American Express. Benefit terms change, so confirm in your Amex account.*

@@ -76,3 +76,17 @@ test('test digest goes to the dev outbox', async () => {
   assert.equal(r.status, 200);
   assert.ok(typeof r.body.sent === 'boolean');
 });
+
+test('push topic validation and new-user flag', async () => {
+  assert.equal((await call('/api/settings', 'PUT', { ntfyTopic: 'no spaces!' })).status, 400);
+  assert.equal((await call('/api/settings', 'PUT', { ntfyTopic: 'my-private-topic-123' })).status, 200);
+  assert.equal((await call('/api/state')).body.user.ntfyTopic, 'my-private-topic-123');
+  assert.equal((await call('/api/settings', 'PUT', { ntfyTopic: '' })).status, 200);
+  assert.equal((await call('/api/state')).body.user.ntfyTopic, '');
+  // second user has no entries or credit settings yet -> isNew
+  const saved = cookie; cookie = '';
+  await call('/api/auth/signup', 'POST', { email: 'new@b.co', password: 'another long password' });
+  assert.equal((await call('/api/state')).body.isNew, true);
+  cookie = saved;
+  assert.equal((await call('/api/state')).body.isNew, false);
+});

@@ -2,7 +2,8 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { q } from './db.js';
-import { ACTIVE_CREDITS, CREDIT_BY_ID, CATALOG_VERSION, DEFAULT_LEAD_DAYS } from './catalog.js';
+import { ACTIVE_CREDITS, ANNUAL_FEE, CREDIT_BY_ID, CATALOG_VERSION, DEFAULT_LEAD_DAYS } from './catalog.js';
+import { sendPush, validTopic } from './push.js';
 import { currentPeriod, daysBetween, isValidTz, localNow, periodKeyForDate, periodsForYear } from './periods.js';
 import { digestEmail, digestWindowOpen, dueReminders } from './reminders.js';
 import { buildIcs } from './ics.js';
@@ -67,7 +68,7 @@ function auth(req, res, next) {
 
 const leadDaysOf = (u) => ({ ...DEFAULT_LEAD_DAYS, ...(u.lead_days ? JSON.parse(u.lead_days) : {}) });
 const publicUser = (u) => ({
-  email: u.email, tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
+  email: u.email, ntfyTopic: u.ntfy_topic || '', tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
   leadDays: leadDaysOf(u), calendarUrl: `${BASE_URL}/cal/${u.cal_token}.ics`,
 });
 
@@ -122,7 +123,8 @@ function buildState(user, year) {
     }
   }
   return {
-    today, year, credits, catalogVersion: CATALOG_VERSION, user: publicUser(user),
+    today, year, credits, catalogVersion: CATALOG_VERSION, annualFee: ANNUAL_FEE,
+    isNew: !q.get('SELECT 1 x FROM user_credits WHERE user_id=? UNION SELECT 1 FROM entries WHERE user_id=?', user.id, user.id), user: publicUser(user),
     summary: { possible: round2(possible), captured: round2(captured), remainingNow: round2(remainingNow) },
     pendingDetections: q.get("SELECT COUNT(*) n FROM detections WHERE user_id=? AND status='pending'", user.id).n,
   };
@@ -284,7 +286,13 @@ app.put('/api/settings', auth, (req, res) => {
       if (Array.isArray(arr)) leads[k] = [...new Set(arr.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 180))].sort((a, b2) => b2 - a);
     }
   }
-  q.run('UPDATE users SET tz=?, remind_hour=?, email_reminders=?, lead_days=? WHERE id=?', tz, hour, 'emailReminders' in b ? +!!b.emailReminders : u.email_reminders, JSON.stringify(leads), u.id);
+  let topic = u.ntfy_topic;
+  if ('ntfyTopic' in b) {
+    const t = String(b.ntfyTopic || '').trim();
+    if (t && !validTopic(t)) return bad(res, 'Push topic must be 6-64 letters, numbers, - or _.');
+    topic = t || null;
+  }
+  q.run('UPDATE users SET tz=?, remind_hour=?, email_reminders=?, lead_days=?, ntfy_topic=? WHERE id=?', tz, hour, 'emailReminders' in b ? +!!b.emailReminders : u.email_reminders, JSON.stringify(leads), topic, u.id);
   res.json({ ok: true });
 });
 
@@ -308,7 +316,10 @@ async function runDigest(user, { force = false, now = new Date() } = {}) {
   const { due, markSent } = dueReminders({ states: reminderStates(user, today), today, leadDays: leadDaysOf(user), sent: force ? new Set() : sent });
   if (!due.length) return { sent: false, count: 0 };
   const mail = digestEmail(due, BASE_URL);
-  await sendMail({ to: user.email, ...mail });
+  if (user.email_reminders || force) await sendMail({ to: user.email, ...mail });
+  if (user.ntfy_topic) {
+    await sendPush(user.ntfy_topic, { title: `${due.length} Platinum credit${due.length > 1 ? 's' : ''} to use`, message: due.slice(0, 6).map((d) => `${d.name}: $${d.remaining.toFixed(0)} left, ${d.daysLeft === 0 ? 'last day' : d.daysLeft + 'd'}`).join('\n'), click: BASE_URL }).catch((e) => console.error('push failed', e.message));
+  }
   if (!force) for (const m of markSent) q.run('INSERT OR IGNORE INTO reminders_sent(user_id,credit_id,period_key,lead) VALUES (?,?,?,?)', user.id, m.creditId, m.periodKey, m.lead);
   return { sent: true, count: due.length };
 }
@@ -414,7 +425,7 @@ app.post('/api/gmail/disconnect', auth, (req, res) => {
 
 // ---------- scheduler ----------
 export async function tick(now = new Date()) {
-  for (const u of q.all('SELECT * FROM users WHERE email_reminders=1')) {
+  for (const u of q.all('SELECT * FROM users WHERE email_reminders=1 OR ntfy_topic IS NOT NULL')) {
     const date = digestWindowOpen(u, now);
     if (!date) continue;
     try { await runDigest(u, { now }); q.run('UPDATE users SET last_digest_date=? WHERE id=?', date, u.id); }

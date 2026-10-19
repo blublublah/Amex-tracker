@@ -11,6 +11,7 @@
 //   senders     – email sender domains to search in Gmail for receipts
 //   amountMin/Max – plausible charge range (guards against false positives)
 
+export const ANNUAL_FEE = 895;
 export const CATALOG_VERSION = '2026-10-19';
 
 export const CREDITS = [

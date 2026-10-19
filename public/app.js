@@ -89,7 +89,6 @@ function viewNow() {
   const soon = open.filter((x) => x.p.daysLeft <= 14);
   const later = open.filter((x) => x.p.daysLeft > 14);
   const done = cur.filter((x) => x.p.done);
-  const rate = S.summary.possible ? Math.round((S.summary.captured / S.summary.possible) * 100) : 0;
   const dateStr = new Date(S.today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   return `
   <div class="hero"><div class="eyebrow">${esc(dateStr)}</div>
@@ -98,8 +97,13 @@ function viewNow() {
     <div class="figures">
       <div class="fig"><b>${money(S.summary.captured)}</b><span>Claimed in ${S.year}</span></div>
       <div class="fig"><b>${money(S.summary.possible)}</b><span>Available in ${S.year}</span></div>
-      <div class="fig"><b>${rate}%</b><span>Captured</span></div>
+      <div class="fig"><b>${Math.round((S.summary.captured / S.annualFee) * 100)}%</b><span>of $${S.annualFee} fee covered</span></div>
     </div></div>
+  ${S.isNew && !localStorage.getItem('welcomed') ? `<section><div class="panel"><div class="eyebrow">Welcome</div><h3>Three steps to a well-kept Platinum</h3>
+    <ol class="guide-list"><li><b>Choose your credits</b> in <a href="#settings">Settings</a> — untrack any you will not use so reminders stay relevant.</li>
+    <li><b>Enroll</b> in the Amex Benefits dashboard for Resy, lululemon, Digital Entertainment, Equinox, CLEAR+, Oura and the airline credit, then tick "I've enrolled" on each card.</li>
+    <li><b>Backfill and automate:</b> mark credits already used in the <a href="#year">Year</a> view, then import an Amex CSV or connect Gmail under <a href="#connect">Auto-detect</a>.</li></ol>
+    <p><button class="btn ghost small" data-act="welcomed">Got it</button></p></div></section>` : ''}
   ${soon.length ? `<section><div class="sec-head"><h2>Expiring soon</h2><span class="eyebrow">Within 14 days</span></div><div class="grid">${soon.map((x) => cardFor(x.c, x.p)).join('')}</div></section>` : ''}
   ${later.length ? `<section><div class="sec-head"><h2>Available this period</h2></div><div class="grid">${later.map((x) => cardFor(x.c, x.p)).join('')}</div></section>` : ''}
   ${done.length ? `<section><div class="sec-head"><h2>Claimed</h2></div><div class="grid">${done.map((x) => cardFor(x.c, x.p)).join('')}</div></section>` : ''}
@@ -192,6 +196,9 @@ function viewSettings() {
     <label class="check"><input type="checkbox" id="s-email" ${u.emailReminders ? 'checked' : ''}><span class="box"></span>Send me reminder emails</label>
     <div class="two"><div><label class="f" for="s-tz">Time zone</label><select id="s-tz">${tzs.map((t) => `<option ${t === u.tz ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
     <div><label class="f" for="s-hour">Send at</label><select id="s-hour">${[...Array(24).keys()].map((h) => `<option value="${h}" ${h === u.remindHour ? 'selected' : ''}>${((h + 11) % 12) + 1}:00 ${h < 12 ? 'AM' : 'PM'}</option>`).join('')}</select></div></div>
+    <label class="f" for="s-ntfy">Phone push via ntfy (optional)</label>
+    <input type="text" id="s-ntfy" value="${esc(u.ntfyTopic)}" placeholder="a-long-private-topic-name" autocomplete="off">
+    <p class="muted small">Install the free ntfy app and subscribe to this topic name (pick something hard to guess). Reminders arrive as push notifications.</p>
     <label class="f">Days before the deadline (comma separated)</label>
     <div class="leads">${types.map(([k, l]) => `<div><div class="small muted">${l}</div><input type="text" data-lead="${k}" value="${u.leadDays[k].join(', ')}" aria-label="${l} lead days"></div>`).join('')}</div>
     <p class="mt24 mini"><button class="btn" data-act="savesettings">Save</button><button class="btn ghost" data-act="testmail">Send a test digest</button></p>
@@ -248,6 +255,7 @@ document.addEventListener('click', async (e) => {
   const act = t.dataset.act;
   try {
     if (act === 'mode') { authMode = t.dataset.m; flash = null; return renderAuth(); }
+    if (act === 'welcomed') { localStorage.setItem('welcomed', '1'); return render(); }
     if (act === 'logout') { await api('/api/auth/logout', 'POST', {}); S = null; flash = null; return render(); }
     if (act === 'year') { year = S.year + Number(t.dataset.d); return load(); }
     if (act === 'delentry') { await api(`/api/entries/${t.dataset.id}`, 'DELETE'); return load(); }
@@ -268,7 +276,7 @@ document.addEventListener('click', async (e) => {
     if (act === 'savesettings') {
       const leadDays = {};
       document.querySelectorAll('[data-lead]').forEach((i) => { leadDays[i.dataset.lead] = i.value.split(/[ ,]+/).filter(Boolean).map(Number); });
-      await api('/api/settings', 'PUT', { emailReminders: document.getElementById('s-email').checked, tz: document.getElementById('s-tz').value, remindHour: Number(document.getElementById('s-hour').value), leadDays });
+      await api('/api/settings', 'PUT', { emailReminders: document.getElementById('s-email').checked, tz: document.getElementById('s-tz').value, ntfyTopic: document.getElementById('s-ntfy').value, remindHour: Number(document.getElementById('s-hour').value), leadDays });
       await load(); return say('Settings saved.');
     }
     if (act === 'testmail') { const r = await api('/api/reminders/test', 'POST', {}); return say(r.sent ? `Test digest sent with ${r.count} credit${r.count > 1 ? 's' : ''}.` : 'Nothing is open right now, so there was nothing to send.'); }
