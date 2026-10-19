@@ -90,3 +90,16 @@ test('push topic validation and new-user flag', async () => {
   cookie = saved;
   assert.equal((await call('/api/state')).body.isNew, false);
 });
+
+test('export/import round trip and demo account', async () => {
+  const exp = (await call('/api/export')).body;
+  assert.equal(exp.version, 1);
+  assert.ok(exp.entries.length >= 2);
+  cookie = '';
+  const demo = await call('/api/demo', 'POST', { tz: 'America/Denver' });
+  assert.equal(demo.status, 200);
+  assert.ok((await call('/api/export')).body.entries.length > 5);
+  const r = await call('/api/import/json', 'POST', exp);
+  assert.ok(r.body.added >= 2);
+  assert.equal((await call('/api/import/json', 'POST', exp)).body.added, 0); // idempotent by ext_id only for detected rows
+});

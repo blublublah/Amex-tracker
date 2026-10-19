@@ -329,6 +329,60 @@ export const CREDITS = [
   },
 ];
 
+// Practical strategy tips, appended to each credit's guide. Kept separate so the core terms above stay easy to audit.
+const EXTRA_TIPS = {
+  hotel: [
+    'Compare the Amex Travel price with the hotel\'s own site; the credit usually outweighs a small difference, and Fine Hotels + Resorts adds perks (breakfast, upgrade when available, late checkout).',
+    'Plan one stay per half-year, or a single $300+ night, since the credit is per half and does not roll over.',
+    'Keep the confirmation email; if the credit does not post within a few days after checkout, send it to Amex chat.',
+  ],
+  resy: [
+    'A Resy gift card for yourself or a friend is the lowest-effort way to use a quarter\'s $100 when you are not dining out.',
+    'Split across occasions: a $100 dinner, or two $50 lunches, both work; the credit posts per qualifying charge.',
+    'Check the restaurant is on Resy (not OpenTable) before you go; the Resy app lists them.',
+  ],
+  lululemon: [
+    'Everyday basics (socks, tank tops, belt bags) fit near $75 if you do not need anything big; gift cards also work.',
+    'Make the purchase early in the quarter so any post-purchase hiccup can be fixed before the quarter closes.',
+    'Returns reverse the credit, so keep what you buy within the quarter.',
+  ],
+  digital: [
+    'Pick a monthly service you would pay for anyway (YouTube Premium, Peacock, NYT) and stack a second to reach $25.',
+    'Annual-billed plans only count the month they are charged; keep a monthly subscription for consistent monthly credits.',
+    'Check "Amex Offers" and your Benefits dashboard monthly to confirm each credit posted.',
+  ],
+  uber_cash: [
+    'Order Uber Eats for something you would buy anyway; $15 covers a modest meal with fees.',
+    'Check your Uber Cash balance in the app before month end; a short ride or a grocery order uses up any leftover.',
+    'In December the balance is $35, so plan a larger order or a ride.',
+  ],
+  uber_one: [
+    'If you already pay for Uber One, just switch its payment method to the Platinum before the next billing date.',
+    'The credit appears once the membership charge posts; monthly plans accumulate toward $120 for the year.',
+  ],
+  airline: [
+    'Pick the airline you actually fly most; the selection is yours to change annually.',
+    'Checked bags, seat selection and in-flight Wi-Fi are the easiest qualifying charges; buy the seat or bag for a trip you have booked.',
+    'Airline gift cards are generally not accepted, and airfare is excluded.',
+  ],
+  clear: [
+    'If you are already a CLEAR+ member, change the card on file; the credit only needs the membership charge on the Platinum.',
+  ],
+  walmart: [
+    'Use the monthly membership; the credit covers the fee plus tax each month, so effectively it is free.',
+    'Walmart+ Plus Up add-ons are not covered.',
+  ],
+  oura: [
+    'The credit applies once per calendar year, so buy the ring or an accessory early rather than at the last minute.',
+    'Memberships do not count; make sure the order is hardware on ouraring.com.',
+  ],
+  equinox: [
+    'Equinox+ digital is the cheapest way to qualify; stack it with a CLEAR or Walmart+ credit and your fee coverage climbs quickly.',
+    'Cancel auto-renewal after the credit posts if you will not use it.',
+  ],
+};
+for (const c of CREDITS) c.guide.push(...(EXTRA_TIPS[c.id] || []));
+
 export const CREDIT_BY_ID = Object.fromEntries(CREDITS.map((c) => [c.id, c]));
 export const ACTIVE_CREDITS = CREDITS.filter((c) => c.status !== 'retired');
 

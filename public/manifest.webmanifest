@@ -1,0 +1,10 @@
+{
+  "name": "Platinum Credit Tracker",
+  "short_name": "Credits",
+  "description": "Track every Amex Platinum credit and never miss a deadline.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e1a2b",
+  "theme_color": "#0e1a2b",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

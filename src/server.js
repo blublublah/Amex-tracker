@@ -303,6 +303,56 @@ app.post('/api/account/delete', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- export / import / demo ----------
+app.get('/api/export', auth, (req, res) => {
+  const u = req.user;
+  res.set('content-disposition', 'attachment; filename="platinum-tracker-export.json"').json({
+    version: 1, exportedAt: new Date().toISOString(), settings: publicUser(u),
+    credits: q.all('SELECT credit_id,tracked,enrolled,remind,airline FROM user_credits WHERE user_id=?', u.id),
+    entries: q.all('SELECT credit_id,period_key,amount,date,source,note,ext_id FROM entries WHERE user_id=? ORDER BY id', u.id),
+  });
+});
+
+app.post('/api/import/json', auth, (req, res) => {
+  const d = req.body;
+  if (!d || d.version !== 1 || !Array.isArray(d.entries)) return bad(res, 'Not a Platinum Tracker export file.');
+  let added = 0;
+  for (const e of d.entries.slice(0, 20000)) {
+    const c = CREDIT_BY_ID[e.credit_id];
+    if (!c || !(Number(e.amount) > 0) || typeof e.period_key !== 'string') continue;
+    if (c.period !== 'cycle' && !periodsForYear(c, Number(e.period_key.slice(0, 4))).some((p) => p.key === e.period_key)) continue;
+    if (q.get("SELECT 1 x FROM entries WHERE user_id=? AND credit_id=? AND period_key=? AND amount=? AND IFNULL(date,'')=?", req.user.id, e.credit_id, e.period_key, round2(Number(e.amount)), e.date || '')) continue;
+    const r = q.run('INSERT OR IGNORE INTO entries(user_id,credit_id,period_key,amount,date,source,note,ext_id) VALUES (?,?,?,?,?,?,?,?)',
+      req.user.id, e.credit_id, e.period_key, round2(Number(e.amount)), e.date || null, String(e.source || 'import').slice(0, 20), e.note ? String(e.note).slice(0, 200) : null, e.ext_id ? String(e.ext_id).slice(0, 200) : null);
+    added += Number(r.changes);
+  }
+  for (const c of Array.isArray(d.credits) ? d.credits : []) {
+    if (!CREDIT_BY_ID[c.credit_id]) continue;
+    q.run(`INSERT INTO user_credits(user_id,credit_id,tracked,enrolled,remind,airline) VALUES (?,?,?,?,?,?)
+           ON CONFLICT(user_id,credit_id) DO UPDATE SET tracked=excluded.tracked,enrolled=excluded.enrolled,remind=excluded.remind,airline=excluded.airline`,
+    req.user.id, c.credit_id, +!!c.tracked, +!!c.enrolled, +!!c.remind, String(c.airline || '').slice(0, 60));
+  }
+  res.json({ added });
+});
+
+// Throwaway account with realistic sample data so people can look around before signing up.
+app.post('/api/demo', limit(5, 60 * 60 * 1000), (req, res) => {
+  const tz = isValidTz(req.body?.tz) ? req.body.tz : 'America/New_York';
+  const info = q.run('INSERT INTO users(email,pw_hash,tz,cal_token,email_reminders) VALUES (?,?,?,?,0)', `demo-${randomToken(6)}@demo.invalid`, hashPassword(randomToken(18)), tz, randomToken(24));
+  const user = q.get('SELECT * FROM users WHERE id=?', Number(info.lastInsertRowid));
+  const today = localNow(tz).date, year = Number(today.slice(0, 4));
+  for (const c of ACTIVE_CREDITS) {
+    if (c.period === 'cycle') continue;
+    q.run('INSERT INTO user_credits(user_id,credit_id,tracked,enrolled,remind,airline) VALUES (?,?,1,?,1,?)', user.id, c.id, +c.enrollment, c.id === 'airline' ? 'Delta' : '');
+    // Fill most past periods, leaving gaps so the dashboard shows "missed" and "open" states.
+    periodsForYear(c, year).forEach((p, i) => {
+      if (p.end < today && (i + c.id.length) % 4 !== 0) addEntry(user.id, { creditId: c.id, periodKey: p.key, amount: p.amount, date: p.end, source: 'demo' });
+    });
+  }
+  startSession(res, user.id);
+  res.json({ ok: true });
+});
+
 // ---------- reminders ----------
 function reminderStates(user, today) {
   const settings = creditSettings(user.id);
@@ -436,6 +486,7 @@ export async function tick(now = new Date()) {
     try { await scanUser(q.get('SELECT * FROM users WHERE id=?', l.user_id), 14); } catch (e) { console.error('gmail scan failed', l.user_id, e.message); }
   }
   q.run('DELETE FROM sessions WHERE expires_at<?', Date.now());
+  q.run("DELETE FROM users WHERE email LIKE 'demo-%@demo.invalid' AND created_at < datetime('now','-3 days')");
 }
 
 app.use((err, _req, res, _next) => {

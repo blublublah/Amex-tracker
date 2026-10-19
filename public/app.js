@@ -120,7 +120,7 @@ function shortLabel(c, p) {
 
 function viewYear() {
   const rows = S.credits.filter((c) => c.tracked && c.period !== 'cycle').map((c) => `
-    <div class="nm">${esc(c.name)}<small>${money(c.amount)} · ${c.period}${c.monthAmounts ? ' (Dec $35)' : ''}</small></div>
+    <div class="nm">${esc(c.name)}<small>${money(c.amount)} · ${c.period}${c.monthAmounts ? ' (Dec $35)' : ''} · <b>${money(c.periods.reduce((n, p) => n + Math.min(p.used, p.amount), 0))}</b> of ${money(c.periods.reduce((n, p) => n + p.amount, 0))} claimed</small></div>
     <div class="cells">${c.periods.map((p) => {
       const cls = p.done ? 'done' : p.used > 0 ? 'partial' : p.isPast ? 'miss' : p.isCurrent ? '' : 'fut';
       return `<button class="cell ${cls} ${p.isCurrent ? 'cur' : ''}" data-act="toggle" data-id="${c.id}" data-key="${p.key}" data-checked="${p.done ? 1 : 0}" title="${esc(p.label)} · ${money(p.used)} of ${money(p.amount)} — click to ${p.done ? 'clear' : 'mark used'}">${shortLabel(c, p)}<b>${money(p.used)}</b></button>`;
@@ -212,6 +212,8 @@ function viewSettings() {
       <td><label class="check"><input type="checkbox" data-act="setc" data-f="remind" data-id="${c.id}" ${c.remind ? 'checked' : ''}><span class="box"></span></label></td>
       <td>${c.enrollment ? `<label class="check"><input type="checkbox" data-act="setc" data-f="enrolled" data-id="${c.id}" ${c.enrolled ? 'checked' : ''}><span class="box"></span></label>` : '<span class="muted small">n/a</span>'}</td></tr>`).join('')}
     </tbody></table></div>
+  <div class="panel"><h3>Your data</h3><p class="muted small">Download everything you have recorded, or restore it into another account.</p>
+    <p class="mini"><a class="btn ghost" href="/api/export" download>Export JSON</a><input type="file" id="jsonfile" accept=".json,application/json" class="w240"><button class="btn ghost" data-act="importjson">Import</button></p></div>
   <div class="panel"><h3>Account</h3><p class="muted small">Deleting your account removes all your data, including any Gmail connection.</p>
     <p class="mini"><input type="password" id="delpw" placeholder="Password" aria-label="Password to confirm deletion" class="w240"><button class="btn ghost" data-act="delacct">Delete account</button></p></div>
   </section>`;
@@ -232,6 +234,7 @@ function renderAuth() {
       ${mode !== 'forgot' ? `<label class="f" for="a-pw">${mode === 'reset' ? 'New password' : 'Password'}</label><input id="a-pw" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required>` : ''}
       ${mode === 'signup' ? '<div class="muted small mt6">At least 10 characters.</div>' : ''}
       <button class="btn" type="submit">${titles[mode][1]}</button>
+      ${mode === 'login' || mode === 'signup' ? '<p class="small mt20"><button type="button" class="link" data-act="demo">Just looking? Try a demo with sample data</button></p>' : ''}
       <p class="small mt20">${mode === 'login' ? `<button type="button" class="link" data-act="mode" data-m="signup">Create an account</button> · <button type="button" class="link" data-act="mode" data-m="forgot">Forgot password</button>` : `<button type="button" class="link" data-act="mode" data-m="login">Back to sign in</button>`}</p>
     </form></div></div>`;
   document.getElementById('authform').addEventListener('submit', async (e) => {
@@ -255,6 +258,13 @@ document.addEventListener('click', async (e) => {
   const act = t.dataset.act;
   try {
     if (act === 'mode') { authMode = t.dataset.m; flash = null; return renderAuth(); }
+    if (act === 'demo') { await api('/api/demo', 'POST', { tz: Intl.DateTimeFormat().resolvedOptions().timeZone }); flash = null; route = 'now'; return load(); }
+    if (act === 'importjson') {
+      const f = document.getElementById('jsonfile').files[0];
+      if (!f) return say('Choose an export file first.', true);
+      let d; try { d = JSON.parse(await f.text()); } catch { return say('That file is not valid JSON.', true); }
+      const r = await api('/api/import/json', 'POST', d); await load(); return say(`Imported ${r.added} new entries.`);
+    }
     if (act === 'welcomed') { localStorage.setItem('welcomed', '1'); return render(); }
     if (act === 'logout') { await api('/api/auth/logout', 'POST', {}); S = null; flash = null; return render(); }
     if (act === 'year') { year = S.year + Number(t.dataset.d); return load(); }
@@ -331,3 +341,5 @@ function onHash() {
 window.addEventListener('hashchange', onHash);
 await load();
 onHash();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
