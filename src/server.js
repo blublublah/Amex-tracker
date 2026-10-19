@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { q } from './db.js';
-import { ACTIVE_CREDITS, ANNUAL_FEE, CREDIT_BY_ID, CATALOG_VERSION, DEFAULT_LEAD_DAYS } from './catalog.js';
+import { ACTIVE_CREDITS, ANNUAL_FEE, CARDS, CREDIT_BY_ID, CATALOG_VERSION, DEFAULT_LEAD_DAYS } from './catalog.js';
 import { sendPush, validTopic } from './push.js';
 import { currentPeriod, daysBetween, isValidTz, localNow, periodKeyForDate, periodsForYear } from './periods.js';
 import { digestEmail, digestWindowOpen, dueReminders } from './reminders.js';
@@ -75,9 +75,10 @@ function auth(req, res, next) {
   next();
 }
 
+const cardsOf = (u) => { try { const c = JSON.parse(u.cards || '["platinum"]').filter((x) => CARDS[x]); return c.length ? c : ['platinum']; } catch { return ['platinum']; } };
 const leadDaysOf = (u) => ({ ...DEFAULT_LEAD_DAYS, ...(u.lead_days ? JSON.parse(u.lead_days) : {}) });
 const publicUser = (u) => ({
-  email: u.email, ntfyTopic: u.ntfy_topic || '', tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
+  email: u.email, cards: cardsOf(u), ntfyTopic: u.ntfy_topic || '', tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
   leadDays: leadDaysOf(u), calendarUrl: `${BASE_URL}/cal/${u.cal_token}.ics`,
 });
 
@@ -105,7 +106,8 @@ function buildState(user, year) {
   year = year || Number(today.slice(0, 4));
   const settings = creditSettings(user.id);
   const used = usedMap(user.id, year);
-  const credits = ACTIVE_CREDITS.map((c) => {
+  const held = cardsOf(user);
+  const credits = ACTIVE_CREDITS.filter((c) => held.includes(c.card)).map((c) => {
     const s = settings(c.id);
     let periods = periodsForYear(c, year).map((p) => {
       const entries = used[`${c.id}|${p.key}`] || [];
@@ -132,7 +134,7 @@ function buildState(user, year) {
     }
   }
   return {
-    today, year, credits, catalogVersion: CATALOG_VERSION, annualFee: ANNUAL_FEE,
+    today, year, credits, catalogVersion: CATALOG_VERSION, annualFee: held.reduce((n, id) => n + CARDS[id].fee, 0), cards: CARDS,
     isNew: !q.get('SELECT 1 x FROM user_credits WHERE user_id=? UNION SELECT 1 FROM entries WHERE user_id=?', user.id, user.id), user: publicUser(user),
     summary: { possible: round2(possible), captured: round2(captured), remainingNow: round2(remainingNow) },
     pendingDetections: q.get("SELECT COUNT(*) n FROM detections WHERE user_id=? AND status='pending'", user.id).n,
@@ -300,13 +302,19 @@ app.put('/api/settings', auth, (req, res) => {
       if (Array.isArray(arr)) leads[k] = [...new Set(arr.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 180))].sort((a, b2) => b2 - a);
     }
   }
+  let cardsJson = u.cards;
+  if (Array.isArray(b.cards)) {
+    const c = b.cards.filter((x) => CARDS[x]);
+    if (!c.length) return bad(res, 'Choose at least one card.');
+    cardsJson = JSON.stringify([...new Set(c)]);
+  }
   let topic = u.ntfy_topic;
   if ('ntfyTopic' in b) {
     const t = String(b.ntfyTopic || '').trim();
     if (t && !validTopic(t)) return bad(res, 'Push topic must be 6-64 letters, numbers, - or _.');
     topic = t || null;
   }
-  q.run('UPDATE users SET tz=?, remind_hour=?, email_reminders=?, lead_days=?, ntfy_topic=? WHERE id=?', tz, hour, 'emailReminders' in b ? +!!b.emailReminders : u.email_reminders, JSON.stringify(leads), topic, u.id);
+  q.run('UPDATE users SET tz=?, remind_hour=?, email_reminders=?, lead_days=?, ntfy_topic=?, cards=? WHERE id=?', tz, hour, 'emailReminders' in b ? +!!b.emailReminders : u.email_reminders, JSON.stringify(leads), topic, cardsJson || null, u.id);
   res.json({ ok: true });
 });
 
@@ -371,7 +379,8 @@ app.post('/api/demo', limit(5, 60 * 60 * 1000), (req, res) => {
 function reminderStates(user, today) {
   const settings = creditSettings(user.id);
   const used = usedMap(user.id, today.slice(0, 4));
-  return ACTIVE_CREDITS.map((c) => ({ credit: c, ...settings(c.id), snoozed: !!settings(c.id).snoozeUntil && settings(c.id).snoozeUntil >= today, used: (key) => sum(used[`${c.id}|${key}`]) }));
+  const held = cardsOf(user);
+  return ACTIVE_CREDITS.filter((c) => held.includes(c.card)).map((c) => ({ credit: c, ...settings(c.id), snoozed: !!settings(c.id).snoozeUntil && settings(c.id).snoozeUntil >= today, used: (key) => sum(used[`${c.id}|${key}`]) }));
 }
 
 async function runDigest(user, { force = false, now = new Date() } = {}) {
@@ -428,7 +437,8 @@ app.post('/api/detections/:id/:action', auth, (req, res) => {
 app.post('/api/import/csv', auth, (req, res) => {
   let txs;
   try { txs = parseAmexCsv(String(req.body?.text || '')); } catch (e) { return bad(res, e.message); }
-  const dets = txs.map(matchTransaction).filter(Boolean);
+  const card = CARDS[req.body?.card] ? req.body.card : cardsOf(req.user)[0];
+  const dets = txs.map((t) => matchTransaction(t, { cards: [card] })).filter(Boolean);
   const r = ingest(req.user, dets, { autoSpend: !!req.body?.autoApplySpend });
   res.json({ rows: txs.length, matched: dets.length, ...r });
 });
@@ -463,7 +473,7 @@ async function scanUser(user, days = 45) {
   const l = q.get('SELECT * FROM gmail_links WHERE user_id=?', user.id);
   if (!l) throw new Error('Gmail is not connected');
   try {
-    const dets = await scanGmail(decrypt(l.refresh_token_enc), user.tz, { sinceDays: days });
+    const dets = await scanGmail(decrypt(l.refresh_token_enc), user.tz, { sinceDays: days, cards: cardsOf(user) });
     const r = ingest(user, dets, { autoSpend: !!l.auto_apply_spend });
     q.run("UPDATE gmail_links SET last_scan_at=datetime('now'), last_error=NULL WHERE user_id=?", user.id);
     return { found: dets.length, ...r };

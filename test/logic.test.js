@@ -10,7 +10,7 @@ import { buildIcs } from '../src/ics.js';
 test('catalog annual maximum matches Amex totals ($2,994 excl. Venue/Global Entry)', () => {
   let total = 0;
   for (const c of ACTIVE_CREDITS) {
-    if (c.period === 'cycle' || c.id === 'venue') continue;
+    if (c.card !== 'platinum' || c.period === 'cycle' || c.id === 'venue') continue;
     total += periodsForYear(c, 2026).reduce((n, p) => n + p.amount, 0);
   }
   assert.ok(Math.abs(total - 2994) < 1, `total was ${total}`);

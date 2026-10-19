@@ -108,7 +108,7 @@ export function parseEmail(msg, tz = 'America/New_York') {
 }
 
 /** Scan one user's Gmail. Returns detections (not yet persisted). */
-export async function scanGmail(refreshToken, tz, { sinceDays = 45, max = 100 } = {}) {
+export async function scanGmail(refreshToken, tz, { sinceDays = 45, max = 100, cards } = {}) {
   const { access_token } = await refreshAccess(refreshToken);
   const list = await gget(access_token, `messages?maxResults=${max}&q=${encodeURIComponent(buildQuery(sinceDays))}`);
   const detections = [];
@@ -116,7 +116,7 @@ export async function scanGmail(refreshToken, tz, { sinceDays = 45, max = 100 } 
     const full = await gget(access_token, `messages/${m.id}?format=full`);
     const h = (n) => (full.payload.headers.find((x) => x.name.toLowerCase() === n) || {}).value || '';
     const tx = parseEmail({ id: m.id, from: h('from'), subject: h('subject'), dateMs: Number(full.internalDate), text: bodyText(full.payload) }, tz);
-    const d = tx && matchTransaction(tx);
+    const d = tx && matchTransaction(tx, { cards });
     if (d) detections.push(d);
   }
   return detections;

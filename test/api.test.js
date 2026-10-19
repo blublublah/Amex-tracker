@@ -108,3 +108,19 @@ test('cross-origin writes are rejected', async () => {
   const r = await fetch(base + '/api/auth/logout', { method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'application/json' }, body: '{}' });
   assert.equal(r.status, 403);
 });
+
+test('multiple cards: credits, fee total and card-scoped CSV matching', async () => {
+  cookie = '';
+  await call('/api/auth/signup', 'POST', { email: 'multi@b.co', password: 'multi card password', tz: 'America/New_York' });
+  assert.equal((await call('/api/settings', 'PUT', { cards: [] })).status, 400);
+  await call('/api/settings', 'PUT', { cards: ['platinum', 'gold'] });
+  let s = (await call('/api/state?year=2026')).body;
+  assert.equal(s.annualFee, 895 + 325);
+  assert.ok(s.credits.some((c) => c.id === 'gold_dunkin') && s.credits.some((c) => c.id === 'resy'));
+  assert.ok(!s.credits.some((c) => c.id === 'bp_dell'));
+  const csv = 'Date,Description,Amount\n10/03/2026,DUNKIN #1234,-7.00\n10/03/2026,DUNKIN CREDIT,-7.00\n';
+  const r = await call('/api/import/csv', 'POST', { text: csv, card: 'gold' });
+  assert.equal(r.body.applied, 1);
+  s = (await call('/api/state?year=2026')).body;
+  assert.equal(s.credits.find((c) => c.id === 'gold_dunkin').periods[9].done, true);
+});

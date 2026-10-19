@@ -51,12 +51,13 @@ function render() {
 
 function say(text, err = false) { flash = { text, err }; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
+const multi = () => S.user.cards.length > 1;
 function cardFor(c, p) {
   const left = Math.max(0, p.amount - p.used);
   const hot = !p.done && p.daysLeft <= 7;
   const when = p.done ? `<span class="chip ok">Claimed</span>` : `<span class="when ${hot ? 'hot' : ''}">Expires <b>${fmtDate(p.end)}</b> · <b>${p.daysLeft === 0 ? 'today' : p.daysLeft === 1 ? '1 day' : p.daysLeft + ' days'}</b></span>`;
   return `<article class="card ${hot ? 'urgent' : ''} ${p.done ? 'done' : ''}">
-    <div class="brandline">${esc(c.brand)}</div>
+    <div class="brandline">${multi() ? `${esc(S.cards[c.card].name)} · ` : ''}${esc(c.brand)}</div>
     <div class="row"><h3 class="name">${esc(c.name)}</h3><span class="chip">${esc(p.label)}</span></div>
     <div class="row"><div class="amt">${money(p.done ? p.amount : left)}<small>${p.done ? 'claimed' : p.used > 0 ? `remaining of ${money(p.amount)}` : 'available'}</small></div>${when}</div>
     <div class="bar" role="progressbar" aria-valuenow="${Math.round(Math.min(100, (p.used / p.amount) * 100))}" aria-valuemin="0" aria-valuemax="100"><i data-w="${Math.min(100, (p.used / p.amount) * 100).toFixed(0)}"></i></div>
@@ -120,7 +121,7 @@ function shortLabel(c, p) {
 
 function viewYear() {
   const rows = S.credits.filter((c) => c.tracked && c.period !== 'cycle').map((c) => `
-    <div class="nm">${esc(c.name)}<small>${money(c.amount)} · ${c.period}${c.monthAmounts ? ' (Dec $35)' : ''} · <b>${money(c.periods.reduce((n, p) => n + Math.min(p.used, p.amount), 0))}</b> of ${money(c.periods.reduce((n, p) => n + p.amount, 0))} claimed</small></div>
+    <div class="nm">${esc(c.name)}<small>${multi() ? esc(S.cards[c.card].name) + '<br>' : ''}${money(c.amount)} · ${c.period}${c.monthAmounts ? ' (Dec $35)' : ''} · <b>${money(c.periods.reduce((n, p) => n + Math.min(p.used, p.amount), 0))}</b> of ${money(c.periods.reduce((n, p) => n + p.amount, 0))} claimed</small></div>
     <div class="cells">${c.periods.map((p) => {
       const cls = p.done ? 'done' : p.used > 0 ? 'partial' : p.isPast ? 'miss' : p.isCurrent ? '' : 'fut';
       return `<button class="cell ${cls} ${p.isCurrent ? 'cur' : ''}" data-act="toggle" data-id="${c.id}" data-key="${p.key}" data-checked="${p.done ? 1 : 0}" aria-pressed="${p.done}" aria-label="${esc(c.name)} ${esc(p.label)}: ${money(p.used)} of ${money(p.amount)} used" title="${esc(p.label)} · ${money(p.used)} of ${money(p.amount)} — click to ${p.done ? 'clear' : 'mark used'}">${shortLabel(c, p)}<b>${money(p.used)}</b></button>`;
@@ -156,6 +157,7 @@ function viewConnect() {
       <div class="panel"><h3>Amex activity CSV</h3>
         <p class="muted small">Amex.com → Statements &amp; Activity → Download → CSV. Works with any date range and is the most reliable source for posted credits.</p>
         <input type="file" id="csvfile" accept=".csv,text/csv">
+        <label class="f" for="csvcard">Which card is this file for?</label><select id="csvcard">${S.user.cards.map((id) => `<option value="${id}">${esc(S.cards[id].name)}</option>`).join('')}</select>
         <label class="check small mt14"><input type="checkbox" id="csvauto"><span class="box"></span>Also count qualifying charges automatically</label>
         <p><button class="btn" data-act="importcsv">Import</button></p>
       </div>
@@ -191,6 +193,7 @@ function viewSettings() {
   const tzs = (Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [u.tz]);
   const types = [['monthly', 'Monthly credits'], ['quarterly', 'Quarterly'], ['semiannual', 'Semi-annual'], ['annual', 'Annual']];
   return `<section><div class="sec-head"><h2>Reminders &amp; settings</h2></div>
+  <div class="panel"><h3>Your cards</h3><p class="muted small">Choose the cards you hold; each brings its own credits, reminders and fee total.</p>${Object.values(S.cards).map((c) => `<label class="check mt14"><input type="checkbox" data-card="${c.id}" ${u.cards.includes(c.id) ? 'checked' : ''}><span class="box"></span>${esc(c.name)} · $${c.fee}/yr fee</label><br>`).join('')}<p class="mt14"><button class="btn ghost" data-act="savecards">Save cards</button></p></div>
   <div class="panel"><h3>Email reminders</h3>
     <p class="muted small">One tidy digest per day, only when an unused credit crosses one of the lead times below. ${S.mail ? '' : '<b>This server has no SMTP configured; emails are written to a local log.</b>'}</p>
     <label class="check"><input type="checkbox" id="s-email" ${u.emailReminders ? 'checked' : ''}><span class="box"></span>Send me reminder emails</label>
@@ -270,6 +273,10 @@ document.addEventListener('click', async (e) => {
       await api(`/api/credits/${t.dataset.id}`, 'PUT', { snoozeUntil: t.dataset.until ? d.toISOString().slice(0, 10) : '' });
       return load();
     }
+    if (act === 'savecards') {
+      const cards = [...document.querySelectorAll('[data-card]')].filter((i) => i.checked).map((i) => i.dataset.card);
+      await api('/api/settings', 'PUT', { cards }); await load(); return say('Cards updated.');
+    }
     if (act === 'welcomed') { localStorage.setItem('welcomed', '1'); return render(); }
     if (act === 'logout') { await api('/api/auth/logout', 'POST', {}); S = null; flash = null; return render(); }
     if (act === 'year') { year = S.year + Number(t.dataset.d); return load(); }
@@ -282,7 +289,7 @@ document.addEventListener('click', async (e) => {
     if (act === 'importcsv') {
       const f = document.getElementById('csvfile').files[0];
       if (!f) return say('Choose a CSV file first.', true);
-      const r = await api('/api/import/csv', 'POST', { text: await f.text(), autoApplySpend: document.getElementById('csvauto').checked });
+      const r = await api('/api/import/csv', 'POST', { text: await f.text(), autoApplySpend: document.getElementById('csvauto').checked, card: document.getElementById('csvcard').value });
       await load();
       return say(`Read ${r.rows} rows: ${r.applied} credits checked off, ${r.pending} charges waiting for your confirmation${r.skipped ? `, ${r.skipped} already known` : ''}.`);
     }

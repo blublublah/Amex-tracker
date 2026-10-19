@@ -11,7 +11,7 @@
 //   senders     – email sender domains to search in Gmail for receipts
 //   amountMin/Max – plausible charge range (guards against false positives)
 
-export const ANNUAL_FEE = 895;
+export const ANNUAL_FEE = 895; // Platinum; per-card fees are in CARDS
 export const CATALOG_VERSION = '2026-10-19';
 
 export const CREDITS = [
@@ -328,6 +328,56 @@ export const CREDITS = [
     matchers: { creditLine: '(saks)', spend: '(saks)', senders: [], amountMin: 1, amountMax: 5000 },
   },
 ];
+
+
+// ---- Other cards (verified against americanexpress.com card pages, Oct 2026) ----
+export const CARDS = {
+  platinum: { id: 'platinum', name: 'Platinum Card®', fee: 895 },
+  business_platinum: { id: 'business_platinum', name: 'Business Platinum Card®', fee: 895 },
+  gold: { id: 'gold', name: 'Gold Card', fee: 325 },
+};
+
+const mk = (card, id, o) => ({ card, id, emoji: '', enrollment: false, guide: [], ...o });
+const m = (creditLine, spend, amountMin, amountMax, senders = []) => ({ creditLine, spend, senders, amountMin, amountMax });
+const AIRLINES_BP = 'Alaska, American, Delta, Hawaiian, JetBlue, Spirit, Southwest or United';
+
+CREDITS.push(
+  mk('business_platinum', 'bp_hotel', { name: 'Hotel Credit', brand: 'Fine Hotels + Resorts / The Hotel Collection', amount: 300, period: 'semiannual',
+    summary: '$300 every half-year ($600/yr) on prepaid Amex Travel hotel bookings.', terms: 'Prepaid Fine Hotels + Resorts or The Hotel Collection (2-night minimum) through AmexTravel.com.',
+    guide: ['Book on AmexTravel.com with "Pay Now" using the Business Platinum.', 'One qualifying stay per half-year captures the full credit.'], matchers: m('(hotel credit|fine hotels|hotel collection)', '(amex\\s*travel|american express travel|fine hotels|hotel collection)', 50, 20000, ['americanexpress.com']) }),
+  mk('business_platinum', 'bp_hilton', { name: 'Hilton Credit', brand: 'Hilton for Business', amount: 50, period: 'quarterly', enrollment: true,
+    summary: '$50 per quarter ($200/yr) on purchases made directly with Hilton properties.', terms: 'Enrollment required. Hilton for Business membership required; gift cards excluded; purchases made directly with Hilton portfolio properties.',
+    guide: ['Enroll, and join Hilton for Business so the stay is eligible.', 'Pay for stays or on-property dining directly with Hilton, not through a third-party site.'], matchers: m('(hilton)', '(hilton|hampton|doubletree|embassy suites|conrad|waldorf)', 10, 5000, ['hilton.com']) }),
+  mk('business_platinum', 'bp_airline', { name: 'Airline Fee Credit', brand: 'One selected airline', amount: 200, period: 'annual', enrollment: true,
+    summary: `Up to $200 per calendar year in incidental fees with one of ${AIRLINES_BP}.`, terms: 'Select one qualifying airline. Incidental fees only, not airfare.',
+    guide: ['Choose your airline in the Amex dashboard.', 'Pay bag fees, seat selection or in-flight purchases with the card.'], matchers: { ...m('(airline fee|airline incidental)', '(airline|airlines|delta|united|american air|southwest|jetblue|alaska air|hawaiian|spirit)', 5, 600), spendRequires: '(bag|seat|fee|wifi|wi-fi|in-?flight|upgrade|lounge)' } }),
+  mk('business_platinum', 'bp_clear', { name: 'CLEAR+ Credit', brand: 'CLEAR+', amount: 209, period: 'annual',
+    summary: 'Up to $209 per calendar year toward CLEAR+ (taxes and fees excluded).', terms: 'CLEAR+ membership charged to the Business Platinum.', guide: ['Pay your CLEAR+ membership with this card.'], matchers: m('(clear\\+?|clear secure)', '(clear\\s*(plus|secure|me)|clearme|clear\\+)', 50, 300, ['clearme.com']) }),
+  mk('business_platinum', 'bp_dell', { name: 'Dell Technologies Credit', brand: 'Dell', amount: 1150, period: 'annual', enrollment: true,
+    summary: 'Up to $1,150 per calendar year: $150 plus a $1,000 credit after $5,000+ in U.S. Dell purchases.', terms: 'Enrollment required. U.S. purchases directly with Dell Technologies. The additional $1,000 requires $5,000+ in purchases.',
+    guide: ['Enroll, then buy business hardware directly from Dell.com or Dell sales with the card.', 'The first $150 needs no minimum; the extra $1,000 unlocks after $5,000 of purchases.'], matchers: m('(dell)', '(dell\\s*(technologies|marketing|inc|\\.com)|dell\\*)', 20, 50000, ['dell.com']) }),
+  mk('business_platinum', 'bp_chatgpt', { name: 'ChatGPT Business Credit', brand: 'OpenAI', amount: 300, period: 'annual', enrollment: true,
+    summary: 'Up to $300 per calendar year on U.S. ChatGPT Business purchases.', terms: 'Enrollment required; U.S. purchases of ChatGPT Business, subject to auto-renewal.', guide: ['Enroll, then pay your ChatGPT Business subscription with the card.'], matchers: m('(openai|chatgpt)', '(openai|chatgpt)', 10, 2000, ['openai.com']) }),
+  mk('business_platinum', 'bp_adobe', { name: 'Adobe Credit', brand: 'Adobe', amount: 250, period: 'annual', enrollment: true,
+    summary: '$250 per calendar year after $600+ in U.S. Adobe purchases.', terms: 'Enrollment required. Credit applies after $600+ in U.S. purchases directly with Adobe in the calendar year.', guide: ['Enroll, then pay Adobe subscriptions with the card until you pass $600.'], matchers: m('(adobe)', '(adobe)', 5, 5000, ['adobe.com']) }),
+  mk('business_platinum', 'bp_indeed', { name: 'Indeed Credit', brand: 'Indeed', amount: 90, period: 'quarterly', enrollment: true,
+    summary: 'Up to $90 per quarter ($360/yr) on Indeed purchases.', terms: 'Enrollment required; purchases with Indeed.', guide: ['Enroll, then pay for Indeed job promotion or hiring products with the card each quarter.'], matchers: m('(indeed)', '(indeed)', 5, 5000, ['indeed.com']) }),
+  mk('business_platinum', 'bp_wireless', { name: 'Wireless Credit', brand: 'U.S. wireless providers', amount: 10, period: 'monthly', enrollment: true,
+    summary: 'Up to $10 per month ($120/yr) on wireless phone service.', terms: 'Enrollment required; wireless service purchased directly from U.S. wireless providers.', guide: ['Put your phone bill on the card (autopay) after enrolling.'], matchers: m('(wireless)', '(verizon|at&t|att\\*|t-mobile|tmobile|us cellular|wireless)', 10, 500, ['verizon.com', 'att.com', 't-mobile.com']) }),
+  mk('business_platinum', 'bp_global_entry', { name: 'Global Entry / TSA PreCheck', brand: 'Application fee', amount: 120, period: 'cycle', cycleYears: 4,
+    summary: '$120 Global Entry or up to $85 TSA PreCheck, once every 4 years.', terms: 'Application fee charged to the card.', guide: ['Pay the application fee with the card.'], matchers: m('(global entry|tsa precheck)', '(global entry|tsa pre)', 70, 130) }),
+
+  mk('gold', 'gold_dining', { name: 'Dining Credit', brand: 'Grubhub, Five Guys, Cheesecake Factory, Wonder, Buffalo Wild Wings', amount: 10, period: 'monthly', enrollment: true,
+    summary: 'Up to $10 per month ($120/yr) at select dining partners.', terms: 'Enrollment required. Grubhub (including Seamless), Buffalo Wild Wings, Five Guys, The Cheesecake Factory and Wonder.',
+    guide: ['Enroll, then order Grubhub/Seamless or visit a partner each month.', 'It resets monthly and does not roll over.'], matchers: m('(dining credit)', '(grubhub|seamless|buffalo wild wings|five guys|cheesecake factory|wonder)', 5, 500, ['grubhub.com', 'seamless.com']) }),
+  mk('gold', 'gold_uber', { name: 'Uber Cash', brand: 'Uber / Uber Eats', amount: 10, period: 'monthly',
+    summary: '$10 Uber Cash per month ($120/yr) for U.S. rides and orders.', terms: 'Add the Gold Card to your Uber account; pay with an Amex card.', guide: ['Add the card in the Uber app and use Uber Eats before month end.'], matchers: m('(uber cash)', '(uber\\s*\\*?\\s*(eats|trip)?|ubereats)', 3, 500, ['uber.com']) }),
+  mk('gold', 'gold_resy', { name: 'Resy Credit', brand: 'Resy', amount: 50, period: 'semiannual', enrollment: true,
+    summary: 'Up to $50 per half-year ($100/yr) at U.S. Resy restaurants.', terms: 'Enrollment required; 10,000+ qualifying U.S. Resy restaurants.', guide: ['Enroll, then dine at a Resy restaurant or buy a Resy gift card each half-year.'], matchers: m('(resy)', '(resy)', 5, 1000, ['resy.com']) }),
+  mk('gold', 'gold_dunkin', { name: "Dunkin' Credit", brand: "Dunkin'", amount: 7, period: 'monthly', enrollment: true,
+    summary: "Up to $7 per month ($84/yr) at U.S. Dunkin' locations.", terms: "Enrollment required; U.S. Dunkin' locations.", guide: ["Enroll, then pay at Dunkin' with the card (in-store or app)."], matchers: m("(dunkin)", "(dunkin)", 2, 100, ['dunkindonuts.com']) }),
+);
+for (const c of CREDITS) c.card ||= 'platinum';
 
 // Practical strategy tips, appended to each credit's guide. Kept separate so the core terms above stay easy to audit.
 const EXTRA_TIPS = {

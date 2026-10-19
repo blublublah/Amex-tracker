@@ -28,11 +28,12 @@ const CREDIT_WORDS = /credit|cash|benefit|statement/i;
  * Charges are positive, credits negative (Amex CSV convention).
  * Returns a detection or null.
  */
-export function matchTransaction(tx) {
+export function matchTransaction(tx, { cards } = {}) {
   const desc = String(tx.description || '');
   if (!desc || !Number.isFinite(tx.amount) || !tx.date) return null;
 
-  for (const m of compiled) {
+  const list = cards ? cards.flatMap((cd) => compiled.filter((m) => m.credit.card === cd)) : compiled;
+  for (const m of list) {
     const { credit } = m;
     if (tx.amount < 0) {
       if (m.creditLine.test(desc) && CREDIT_WORDS.test(desc)) {
