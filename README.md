@@ -36,10 +36,13 @@ Without `SMTP_HOST`, emails are written to `data/outbox.log` so you can see them
 ## Deploy (needs your accounts)
 
 1. Put this folder in a GitHub repo.
-2. Host somewhere with a persistent disk (SQLite lives in `DATA_DIR`): Render (`render.yaml`), Fly.io, Railway or any Docker host. Set `BASE_URL` to the public HTTPS URL.
+2. Host somewhere with a persistent disk (SQLite lives in `DATA_DIR`) and an always-on process (reminders run in-process): Render (`render.yaml`), Fly.io (`fly.toml`, steps in the file header), Railway or any Docker host. Set `BASE_URL` to the public HTTPS URL. Run a single instance only (SQLite). A clean checkout with `npm ci --omit=dev` and the Dockerfile's start command was verified to boot; the Docker image itself was not built (no Docker daemon in the build environment).
 3. **Email**: create an account with an SMTP provider (Resend, Postmark or SendGrid have free tiers), verify a sending domain, and set `SMTP_*` and `MAIL_FROM`.
 4. **Gmail (optional)**: Google Cloud Console → new project → enable Gmail API → OAuth consent screen (External, Testing; add test users) → Credentials → OAuth client (Web). Authorized redirect URI: `BASE_URL/api/gmail/callback`. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 5. Set `SECRET_KEY` (`openssl rand -hex 32`) and keep it; it encrypts Gmail tokens.
+
+## Notes on timing
+Amex credits reset on the calendar (Jan–Jun/Jul–Dec, quarters, calendar year), so the tracker uses calendar periods, not your card anniversary. Reminders go out once a day at the hour you choose, which doubles as your quiet-hours control.
 
 ## Security notes
 scrypt password hashes, httpOnly SameSite cookies, strict CSP, rate-limited auth, Gmail refresh tokens encrypted at rest (AES-256-GCM), email bodies never stored. Not built yet: SMS, 2FA, email verification at signup.

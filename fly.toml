@@ -1,0 +1,28 @@
+# Fly.io: `fly launch --no-deploy --copy-config`, then:
+#   fly volumes create data --size 1
+#   fly secrets set BASE_URL=https://<app>.fly.dev SECRET_KEY=$(openssl rand -hex 32) SMTP_HOST=... SMTP_USER=... SMTP_PASS=... MAIL_FROM=...
+#   fly deploy
+app = "platinum-credit-tracker"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  DATA_DIR = "/data"
+
+[mounts]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"   # the reminder scheduler runs in-process, so keep one machine always on
+  min_machines_running = 1
+
+[[http_service.checks]]
+  path = "/api/health"
+  interval = "30s"
+  timeout = "5s"
