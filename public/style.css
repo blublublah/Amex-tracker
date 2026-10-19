@@ -188,3 +188,5 @@ table.set input[type=text] { padding: 6px 8px; }
   input[type=text], input[type=email], input[type=password], input[type=number], input[type=file], select { color: var(--text); }
   .card:hover { box-shadow: 0 14px 34px rgba(0, 0, 0, .35); }
 }
+.skip { position: absolute; left: -999px; top: 0; background: var(--gold); color: #0e1a2b; padding: 8px 14px; z-index: 10; }
+.skip:focus { left: 8px; top: 8px; }

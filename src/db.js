@@ -94,6 +94,6 @@ export const q = {
 };
 
 // Lightweight migrations for columns added after first release.
-for (const sql of ['ALTER TABLE users ADD COLUMN ntfy_topic TEXT']) {
+for (const sql of ['ALTER TABLE users ADD COLUMN ntfy_topic TEXT', 'ALTER TABLE user_credits ADD COLUMN snooze_until TEXT']) {
   try { db.exec(sql); } catch { /* column already exists */ }
 }

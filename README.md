@@ -27,7 +27,8 @@ A web app for Amex Platinum cardmembers to track every statement credit (Resy, l
 ```bash
 npm install
 npm start              # http://localhost:3000   (Node >= 22.13)
-npm test
+npm test                      # unit + API tests
+node scripts/e2e.mjs          # browser end-to-end (needs `npm i -D playwright`)
 ```
 Without `SMTP_HOST`, emails are written to `data/outbox.log` so you can see them.
 

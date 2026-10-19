@@ -87,8 +87,8 @@ function creditSettings(userId) {
   return (id) => {
     const r = by[id];
     return r
-      ? { tracked: !!r.tracked, enrolled: !!r.enrolled, remind: !!r.remind, airline: r.airline || '' }
-      : { tracked: true, enrolled: false, remind: true, airline: '' };
+      ? { tracked: !!r.tracked, enrolled: !!r.enrolled, remind: !!r.remind, airline: r.airline || '', snoozeUntil: r.snooze_until || '' }
+      : { tracked: true, enrolled: false, remind: true, airline: '', snoozeUntil: '' };
   };
 }
 
@@ -277,9 +277,14 @@ app.put('/api/credits/:id', auth, (req, res) => {
   const cur = creditSettings(req.user.id)(c.id);
   const n = { ...cur, ...Object.fromEntries(['tracked', 'enrolled', 'remind'].filter((k) => k in req.body).map((k) => [k, !!req.body[k]])) };
   if ('airline' in req.body) n.airline = String(req.body.airline).slice(0, 60);
-  q.run(`INSERT INTO user_credits(user_id,credit_id,tracked,enrolled,remind,airline) VALUES (?,?,?,?,?,?)
-         ON CONFLICT(user_id,credit_id) DO UPDATE SET tracked=excluded.tracked,enrolled=excluded.enrolled,remind=excluded.remind,airline=excluded.airline`,
-  req.user.id, c.id, +n.tracked, +n.enrolled, +n.remind, n.airline);
+  if ('snoozeUntil' in req.body) {
+    const v = String(req.body.snoozeUntil || '');
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return bad(res, 'Bad snooze date.');
+    n.snoozeUntil = v;
+  }
+  q.run(`INSERT INTO user_credits(user_id,credit_id,tracked,enrolled,remind,airline,snooze_until) VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(user_id,credit_id) DO UPDATE SET tracked=excluded.tracked,enrolled=excluded.enrolled,remind=excluded.remind,airline=excluded.airline,snooze_until=excluded.snooze_until`,
+  req.user.id, c.id, +n.tracked, +n.enrolled, +n.remind, n.airline, n.snoozeUntil || null);
   res.json({ ok: true });
 });
 
@@ -366,7 +371,7 @@ app.post('/api/demo', limit(5, 60 * 60 * 1000), (req, res) => {
 function reminderStates(user, today) {
   const settings = creditSettings(user.id);
   const used = usedMap(user.id, today.slice(0, 4));
-  return ACTIVE_CREDITS.map((c) => ({ credit: c, ...settings(c.id), used: (key) => sum(used[`${c.id}|${key}`]) }));
+  return ACTIVE_CREDITS.map((c) => ({ credit: c, ...settings(c.id), snoozed: !!settings(c.id).snoozeUntil && settings(c.id).snoozeUntil >= today, used: (key) => sum(used[`${c.id}|${key}`]) }));
 }
 
 async function runDigest(user, { force = false, now = new Date() } = {}) {

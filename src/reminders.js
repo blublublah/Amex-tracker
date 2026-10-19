@@ -17,7 +17,7 @@ export function dueReminders({ states, today, leadDays, sent }) {
   const due = [];
   const markSent = [];
   for (const s of states) {
-    if (!s.tracked || !s.remind) continue;
+    if (!s.tracked || !s.remind || s.snoozed) continue;
     const credit = s.credit;
     if (credit.period === 'cycle') continue;
     const p = currentPeriod(credit, today);

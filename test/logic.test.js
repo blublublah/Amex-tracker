@@ -118,3 +118,10 @@ test('ICS output is well-formed with alarms', () => {
   assert.equal((ics.match(/BEGIN:VALARM/g) || []).length, DEFAULT_LEAD_DAYS.quarterly.length);
   assert.ok(ics.includes('DTEND;VALUE=DATE:20270101'));
 });
+
+test('snoozed credits are not reminded', () => {
+  const st = ACTIVE_CREDITS.map((c) => ({ credit: c, tracked: true, enrolled: false, remind: true, snoozed: c.id === 'oura', used: () => 0 }));
+  const r = dueReminders({ states: st, today: '2026-12-30', leadDays: DEFAULT_LEAD_DAYS, sent: new Set() });
+  assert.ok(!r.due.some((d) => d.creditId === 'oura'));
+  assert.ok(r.due.some((d) => d.creditId === 'clear'));
+});

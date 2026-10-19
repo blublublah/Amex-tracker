@@ -63,7 +63,7 @@ function cardFor(c, p) {
     ${c.enrollment && !c.enrolled && !p.done ? `<div><span class="chip warn">Enrollment required</span> <label class="check small ml8"><input type="checkbox" data-act="enrolled" data-id="${c.id}"><span class="box"></span>I've enrolled</label></div>` : ''}
     <div class="tools">
       <label class="check"><input type="checkbox" data-act="toggle" data-id="${c.id}" data-key="${p.key}" ${p.done ? 'checked' : ''}><span class="box"></span>Used</label>
-      ${p.done ? '' : `<form class="mini" data-act="addamt" data-id="${c.id}" data-key="${p.key}"><input type="number" min="0.01" step="0.01" placeholder="$ spent" aria-label="Amount spent for ${esc(c.name)}"><button class="btn ghost small" type="submit">Add</button></form>`}
+      ${p.done ? '' : `<button class="link" data-act="snooze" data-id="${c.id}" data-until="${c.snoozeUntil >= S.today ? '' : 'week'}">${c.snoozeUntil >= S.today ? 'Snoozed — resume' : 'Snooze reminders 7 days'}</button><form class="mini" data-act="addamt" data-id="${c.id}" data-key="${p.key}"><input type="number" min="0.01" step="0.01" placeholder="$ spent" aria-label="Amount spent for ${esc(c.name)}"><button class="btn ghost small" type="submit">Add</button></form>`}
     </div>
     ${p.entries.length ? `<ul class="entries">${p.entries.map((e) => `<li><span>${money(e.amount)} · ${e.source === 'manual' ? 'manual' : 'auto: ' + esc(e.source)}${e.date ? ' · ' + fmtDate(e.date) : ''}</span><button data-act="delentry" data-id="${e.id}" aria-label="Remove entry">✕</button></li>`).join('')}</ul>` : ''}
     <details><summary>How to use it</summary><ul>${c.guide.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(c.terms)}</p></details>
@@ -123,7 +123,7 @@ function viewYear() {
     <div class="nm">${esc(c.name)}<small>${money(c.amount)} · ${c.period}${c.monthAmounts ? ' (Dec $35)' : ''} · <b>${money(c.periods.reduce((n, p) => n + Math.min(p.used, p.amount), 0))}</b> of ${money(c.periods.reduce((n, p) => n + p.amount, 0))} claimed</small></div>
     <div class="cells">${c.periods.map((p) => {
       const cls = p.done ? 'done' : p.used > 0 ? 'partial' : p.isPast ? 'miss' : p.isCurrent ? '' : 'fut';
-      return `<button class="cell ${cls} ${p.isCurrent ? 'cur' : ''}" data-act="toggle" data-id="${c.id}" data-key="${p.key}" data-checked="${p.done ? 1 : 0}" title="${esc(p.label)} · ${money(p.used)} of ${money(p.amount)} — click to ${p.done ? 'clear' : 'mark used'}">${shortLabel(c, p)}<b>${money(p.used)}</b></button>`;
+      return `<button class="cell ${cls} ${p.isCurrent ? 'cur' : ''}" data-act="toggle" data-id="${c.id}" data-key="${p.key}" data-checked="${p.done ? 1 : 0}" aria-pressed="${p.done}" aria-label="${esc(c.name)} ${esc(p.label)}: ${money(p.used)} of ${money(p.amount)} used" title="${esc(p.label)} · ${money(p.used)} of ${money(p.amount)} — click to ${p.done ? 'clear' : 'mark used'}">${shortLabel(c, p)}<b>${money(p.used)}</b></button>`;
     }).join('')}</div><div class="yr-sep"></div>`).join('');
   return `<section><div class="sec-head"><h2>${S.year} at a glance</h2>
     <div class="yearnav"><button data-act="year" data-d="-1" aria-label="Previous year">‹</button>${S.year}<button data-act="year" data-d="1" aria-label="Next year">›</button></div></div>
@@ -264,6 +264,11 @@ document.addEventListener('click', async (e) => {
       if (!f) return say('Choose an export file first.', true);
       let d; try { d = JSON.parse(await f.text()); } catch { return say('That file is not valid JSON.', true); }
       const r = await api('/api/import/json', 'POST', d); await load(); return say(`Imported ${r.added} new entries.`);
+    }
+    if (act === 'snooze') {
+      const d = new Date(S.today + 'T12:00:00'); d.setDate(d.getDate() + 7);
+      await api(`/api/credits/${t.dataset.id}`, 'PUT', { snoozeUntil: t.dataset.until ? d.toISOString().slice(0, 10) : '' });
+      return load();
     }
     if (act === 'welcomed') { localStorage.setItem('welcomed', '1'); return render(); }
     if (act === 'logout') { await api('/api/auth/logout', 'POST', {}); S = null; flash = null; return render(); }
