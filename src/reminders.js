@@ -48,15 +48,35 @@ export function dueReminders({ states, today, leadDays, sent }) {
   return { due, markSent };
 }
 
-export function digestEmail(due, appUrl) {
+export const RENEWAL_LEADS = [45, 14, 3];
+
+/** Pure: should we mention the upcoming annual-fee renewal today? renewal = 'YYYY-MM-DD' (any year, month/day used). */
+export function renewalNotice({ renewal, today, captured, fee, sent }) {
+  if (!renewal || !/^\d{4}-\d{2}-\d{2}$/.test(renewal)) return null;
+  const y = Number(today.slice(0, 4));
+  const md = renewal.slice(5);
+  let next = `${y}-${md}`;
+  if (next < today) next = `${y + 1}-${md}`;
+  const daysLeft = daysBetween(today, next);
+  const crossed = RENEWAL_LEADS.filter((l) => daysLeft <= l);
+  if (!crossed.length || crossed.every((l) => sent.has(`renewal|${next.slice(0, 4)}|${l}`))) return null;
+  const pct = fee ? Math.round((captured / fee) * 100) : 0;
+  return {
+    daysLeft, date: next,
+    text: `Annual fee renews ${next} (${daysLeft} day${daysLeft === 1 ? '' : 's'}): you have claimed $${Math.round(captured)} in credits this year, ${pct}% of the $${fee} fee. Time to use what is left, or decide whether to keep the card.`,
+    markSent: crossed.map((l) => ({ creditId: 'renewal', periodKey: next.slice(0, 4), lead: l })),
+  };
+}
+
+export function digestEmail(due, appUrl, extra) {
   const total = due.reduce((n, d) => n + d.remaining, 0);
   const dayWord = (n) => (n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`);
-  const subject = `${due.length} Platinum credit${due.length > 1 ? 's' : ''} to use — $${total.toFixed(0)} still unclaimed`;
+  const subject = due.length ? `${due.length} Platinum credit${due.length > 1 ? 's' : ''} to use — $${total.toFixed(0)} still unclaimed` : 'Your card renews soon — a quick look at your credits';
   const lines = due.map(
     (d) => `• ${d.name}: $${d.remaining.toFixed(2)} left for ${d.periodLabel} — expires ${d.deadline} (${dayWord(d.daysLeft)})` +
       (d.needsEnroll ? '\n  ⚠ Enrollment required: enroll the card first in your Amex Benefits dashboard.' : ''),
   );
-  const text = `Your Amex Platinum credits that are still unused:\n\n${lines.join('\n')}\n\nOpen your tracker: ${appUrl}\n\nManage reminder timing in Settings. Amex terms change; always confirm eligibility in your Amex account.`;
+  const text = `Your Amex Platinum credits that are still unused:\n\n${lines.join('\n')}\n${extra ? `\n${extra}\n` : ''}\nOpen your tracker: ${appUrl}\n\nManage reminder timing in Settings. Amex terms change; always confirm eligibility in your Amex account.`;
   const rows = due.map(
     (d) => `<tr><td style="padding:14px 0;border-bottom:1px solid #e6e0d4">
       <div style="font:600 16px Georgia,serif;color:#14213d">${d.emoji} ${esc(d.name)}</div>
@@ -65,8 +85,9 @@ export function digestEmail(due, appUrl) {
     </td></tr>`).join('');
   const html = `<div style="background:#f6f3ec;padding:32px 12px"><table align="center" width="560" style="background:#fff;border-top:3px solid #b8975a;padding:32px"><tr><td>
     <div style="font:11px Helvetica,Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#b8975a">Platinum Credit Tracker</div>
-    <h1 style="font:400 26px Georgia,serif;color:#14213d;margin:8px 0 4px">$${total.toFixed(0)} still unclaimed</h1>
+    <h1 style="font:400 26px Georgia,serif;color:#14213d;margin:8px 0 4px">${due.length ? `$${total.toFixed(0)} still unclaimed` : 'Renewal reminder'}</h1>
     <table width="100%">${rows}</table>
+    ${extra ? `<p style="font:14px Helvetica,Arial,sans-serif;color:#555;border-left:2px solid #b8975a;padding-left:12px">${esc(extra)}</p>` : ''}
     <p style="margin-top:24px"><a href="${appUrl}" style="background:#14213d;color:#fff;padding:12px 22px;font:13px Helvetica,Arial,sans-serif;letter-spacing:.08em;text-decoration:none;text-transform:uppercase">Open tracker</a></p>
   </td></tr></table></div>`;
   return { subject, text, html };

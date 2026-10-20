@@ -190,3 +190,4 @@ table.set input[type=text] { padding: 6px 8px; }
 }
 .skip { position: absolute; left: -999px; top: 0; background: var(--gold); color: #0e1a2b; padding: 8px 14px; z-index: 10; }
 .skip:focus { left: 8px; top: 8px; }
+.insight { font: 400 22px/1.35 var(--serif); margin: 8px 0; color: var(--ink); }

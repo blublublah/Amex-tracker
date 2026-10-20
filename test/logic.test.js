@@ -125,3 +125,15 @@ test('snoozed credits are not reminded', () => {
   assert.ok(!r.due.some((d) => d.creditId === 'oura'));
   assert.ok(r.due.some((d) => d.creditId === 'clear'));
 });
+
+import { renewalNotice } from '../src/reminders.js';
+test('renewal notice fires at 45/14/3 days, once per threshold, and wraps to next year', () => {
+  const base = { renewal: '2024-03-10', captured: 1200, fee: 895 };
+  assert.equal(renewalNotice({ ...base, today: '2026-12-01', sent: new Set() }), null);
+  const n = renewalNotice({ ...base, today: '2027-01-30', sent: new Set() });
+  assert.equal(n.date, '2027-03-10'); assert.equal(n.daysLeft, 39);
+  assert.match(n.text, /134%/);
+  const sent = new Set(n.markSent.map((m) => `renewal|${m.periodKey}|${m.lead}`));
+  assert.equal(renewalNotice({ ...base, today: '2027-02-01', sent }), null);
+  assert.ok(renewalNotice({ ...base, today: '2027-02-24', sent })); // 14-day lead newly crossed
+});

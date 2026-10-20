@@ -5,7 +5,7 @@ import { q } from './db.js';
 import { ACTIVE_CREDITS, ANNUAL_FEE, CARDS, CREDIT_BY_ID, CATALOG_VERSION, DEFAULT_LEAD_DAYS } from './catalog.js';
 import { sendPush, validTopic } from './push.js';
 import { currentPeriod, daysBetween, isValidTz, localNow, periodKeyForDate, periodsForYear } from './periods.js';
-import { digestEmail, digestWindowOpen, dueReminders } from './reminders.js';
+import { digestEmail, digestWindowOpen, dueReminders, renewalNotice } from './reminders.js';
 import { buildIcs } from './ics.js';
 import { mailEnabled, sendMail } from './mailer.js';
 import { decrypt, encrypt, hashPassword, randomToken, sha256, signState, verifyPassword, verifyState } from './security.js';
@@ -79,7 +79,7 @@ function auth(req, res, next) {
 const cardsOf = (u) => { try { const c = JSON.parse(u.cards || '["platinum"]').filter((x) => CARDS[x]); return c.length ? c : ['platinum']; } catch { return ['platinum']; } };
 const leadDaysOf = (u) => ({ ...DEFAULT_LEAD_DAYS, ...(u.lead_days ? JSON.parse(u.lead_days) : {}) });
 const publicUser = (u) => ({
-  email: u.email, cards: cardsOf(u), ntfyTopic: u.ntfy_topic || '', tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
+  email: u.email, renewalDate: u.renewal_date || '', cards: cardsOf(u), ntfyTopic: u.ntfy_topic || '', tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
   leadDays: leadDaysOf(u), calendarUrl: `${BASE_URL}/cal/${u.cal_token}.ics`,
 });
 
@@ -303,6 +303,12 @@ app.put('/api/settings', auth, (req, res) => {
       if (Array.isArray(arr)) leads[k] = [...new Set(arr.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 180))].sort((a, b2) => b2 - a);
     }
   }
+  let renewal = u.renewal_date;
+  if ('renewalDate' in b) {
+    const v = String(b.renewalDate || '');
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return bad(res, 'Bad renewal date.');
+    renewal = v || null;
+  }
   let cardsJson = u.cards;
   if (Array.isArray(b.cards)) {
     const c = b.cards.filter((x) => CARDS[x]);
@@ -315,7 +321,7 @@ app.put('/api/settings', auth, (req, res) => {
     if (t && !validTopic(t)) return bad(res, 'Push topic must be 6-64 letters, numbers, - or _.');
     topic = t || null;
   }
-  q.run('UPDATE users SET tz=?, remind_hour=?, email_reminders=?, lead_days=?, ntfy_topic=?, cards=? WHERE id=?', tz, hour, 'emailReminders' in b ? +!!b.emailReminders : u.email_reminders, JSON.stringify(leads), topic, cardsJson || null, u.id);
+  q.run('UPDATE users SET tz=?, remind_hour=?, email_reminders=?, lead_days=?, ntfy_topic=?, cards=?, renewal_date=? WHERE id=?', tz, hour, 'emailReminders' in b ? +!!b.emailReminders : u.email_reminders, JSON.stringify(leads), topic, cardsJson || null, renewal || null, u.id);
   res.json({ ok: true });
 });
 
@@ -388,8 +394,11 @@ async function runDigest(user, { force = false, now = new Date() } = {}) {
   const { date: today } = localNow(user.tz, now);
   const sent = new Set(q.all('SELECT * FROM reminders_sent WHERE user_id=?', user.id).map((r) => `${r.credit_id}|${r.period_key}|${r.lead}`));
   const { due, markSent } = dueReminders({ states: reminderStates(user, today), today, leadDays: leadDaysOf(user), sent: force ? new Set() : sent });
-  if (!due.length) return { sent: false, count: 0 };
-  const mail = digestEmail(due, BASE_URL);
+  const st = buildState(user);
+  const renewal = renewalNotice({ renewal: user.renewal_date, today, captured: st.summary.captured, fee: st.annualFee, sent: force ? new Set() : sent });
+  if (!due.length && !renewal) return { sent: false, count: 0 };
+  if (renewal) markSent.push(...renewal.markSent);
+  const mail = digestEmail(due, BASE_URL, renewal?.text);
   if (user.email_reminders || force) await sendMail({ to: user.email, ...mail });
   if (user.ntfy_topic) {
     await sendPush(user.ntfy_topic, { title: `${due.length} Platinum credit${due.length > 1 ? 's' : ''} to use`, message: due.slice(0, 6).map((d) => `${d.name}: $${d.remaining.toFixed(0)} left, ${d.daysLeft === 0 ? 'last day' : d.daysLeft + 'd'}`).join('\n'), click: BASE_URL }).catch((e) => console.error('push failed', e.message));

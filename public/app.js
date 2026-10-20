@@ -119,6 +119,19 @@ function shortLabel(c, p) {
   return String(p.key);
 }
 
+function insights() {
+  const rows = S.credits.filter((c) => c.tracked && c.period !== 'cycle').map((c) => {
+    const missed = c.periods.filter((p) => p.isPast).reduce((n, p) => n + Math.max(0, p.amount - p.used), 0);
+    const claimed = c.periods.reduce((n, p) => n + Math.min(p.used, p.amount), 0);
+    return { c, missed, claimed };
+  });
+  const missedTotal = rows.reduce((n, r) => n + r.missed, 0);
+  const top = rows.filter((r) => r.missed > 0).sort((a, b) => b.missed - a.missed).slice(0, 3);
+  const best = rows.slice().sort((a, b) => b.claimed - a.claimed)[0];
+  return `<div class="panel"><div class="eyebrow">Insights</div>
+    <p class="insight">${missedTotal > 0 ? `<b>${money(missedTotal)}</b> has expired unclaimed so far in ${S.year}${top.length ? `, mostly from ${top.map((r) => `${esc(r.c.name)} (${money(r.missed)})`).join(', ')}` : ''}.` : `Nothing has expired unclaimed so far in ${S.year}. Impressive.`}</p>
+    ${best && best.claimed > 0 ? `<p class="muted small">Your biggest win: ${esc(best.c.name)}, ${money(best.claimed)} claimed.</p>` : ''}</div>`;
+}
 function viewYear() {
   const rows = S.credits.filter((c) => c.tracked && c.period !== 'cycle').map((c) => `
     <div class="nm">${esc(c.name)}<small>${multi() ? esc(S.cards[c.card].name) + '<br>' : ''}${money(c.amount)} · ${c.period}${c.monthAmounts ? ' (Dec $35)' : ''} · <b>${money(c.periods.reduce((n, p) => n + Math.min(p.used, p.amount), 0))}</b> of ${money(c.periods.reduce((n, p) => n + p.amount, 0))} claimed</small></div>
@@ -128,6 +141,7 @@ function viewYear() {
     }).join('')}</div><div class="yr-sep"></div>`).join('');
   return `<section><div class="sec-head"><h2>${S.year} at a glance</h2>
     <div class="yearnav"><button data-act="year" data-d="-1" aria-label="Previous year">‹</button>${S.year}<button data-act="year" data-d="1" aria-label="Next year">›</button></div></div>
+    ${insights()}
     <p class="muted small">Click any period to mark it used or clear it. Dark = claimed, gold outline = partially used, red = missed.</p>
     <div class="yr">${rows}</div></section>`;
 }
@@ -202,6 +216,9 @@ function viewSettings() {
     <label class="f" for="s-ntfy">Phone push via ntfy (optional)</label>
     <input type="text" id="s-ntfy" value="${esc(u.ntfyTopic)}" placeholder="a-long-private-topic-name" autocomplete="off">
     <p class="muted small">Install the free ntfy app and subscribe to this topic name (pick something hard to guess). Reminders arrive as push notifications.</p>
+    <label class="f" for="s-renew">Annual fee renewal date (optional)</label>
+    <input type="date" id="s-renew" value="${esc(u.renewalDate)}">
+    <p class="muted small">We'll mention it 45, 14 and 3 days before, with how much of the fee your credits have covered.</p>
     <label class="f">Days before the deadline (comma separated)</label>
     <div class="leads">${types.map(([k, l]) => `<div><div class="small muted">${l}</div><input type="text" data-lead="${k}" value="${u.leadDays[k].join(', ')}" aria-label="${l} lead days"></div>`).join('')}</div>
     <p class="mt24 mini"><button class="btn" data-act="savesettings">Save</button><button class="btn ghost" data-act="testmail">Send a test digest</button></p>
@@ -298,7 +315,7 @@ document.addEventListener('click', async (e) => {
     if (act === 'savesettings') {
       const leadDays = {};
       document.querySelectorAll('[data-lead]').forEach((i) => { leadDays[i.dataset.lead] = i.value.split(/[ ,]+/).filter(Boolean).map(Number); });
-      await api('/api/settings', 'PUT', { emailReminders: document.getElementById('s-email').checked, tz: document.getElementById('s-tz').value, ntfyTopic: document.getElementById('s-ntfy').value, remindHour: Number(document.getElementById('s-hour').value), leadDays });
+      await api('/api/settings', 'PUT', { emailReminders: document.getElementById('s-email').checked, tz: document.getElementById('s-tz').value, ntfyTopic: document.getElementById('s-ntfy').value, renewalDate: document.getElementById('s-renew').value, remindHour: Number(document.getElementById('s-hour').value), leadDays });
       await load(); return say('Settings saved.');
     }
     if (act === 'testmail') { const r = await api('/api/reminders/test', 'POST', {}); return say(r.sent ? `Test digest sent with ${r.count} credit${r.count > 1 ? 's' : ''}.` : 'Nothing is open right now, so there was nothing to send.'); }
