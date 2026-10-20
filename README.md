@@ -11,7 +11,7 @@ A web app for Amex Platinum cardmembers to track every statement credit (Resy, l
 | Phone push | Optional free [ntfy](https://ntfy.sh) topic in Settings; the same digest arrives as a push notification (`NTFY_SERVER` env to self-host). |
 | Calendar alerts | Private `.ics` feed (Settings) for Google/Apple/Outlook with the same alerts. |
 | Auto-detection | Amex activity **CSV import** (posted credit lines are checked off automatically; qualifying charges go to a confirm list) and optional **Gmail** scanning of Amex alerts and merchant receipts. |
-| Multiple cards | Platinum, Business Platinum and Gold (choose in Settings). Each card brings its own credits and fee total; CSV import is scoped per card. Business Platinum's spend-threshold credits (One AP, Amex Travel flights after $250k spend) and the Gold $100 per-booking hotel credit are not modelled. |
+| Multiple cards | Platinum, Business Platinum, Gold and Business Gold (choose in Settings). Each card brings its own credits and fee total; CSV import is scoped per card. Business Platinum's spend-threshold credits (One AP, Amex Travel flights after $250k spend) and the Gold $100 per-booking hotel credit are not modelled. |
 | Guides | "How to use it" for every credit (on each card and in the Guides tab). |
 | Catalog | `src/catalog.js`, current as of 2026-10-19. Edit it when Amex changes benefits. |
 

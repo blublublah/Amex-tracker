@@ -116,6 +116,7 @@ test('multiple cards: credits, fee total and card-scoped CSV matching', async ()
   await call('/api/settings', 'PUT', { cards: ['platinum', 'gold'] });
   let s = (await call('/api/state?year=2026')).body;
   assert.equal(s.annualFee, 895 + 325);
+  assert.ok(!s.credits.some((c) => c.id === 'bg_flex'));
   assert.ok(s.credits.some((c) => c.id === 'gold_dunkin') && s.credits.some((c) => c.id === 'resy'));
   assert.ok(!s.credits.some((c) => c.id === 'bp_dell'));
   const csv = 'Date,Description,Amount\n10/03/2026,DUNKIN #1234,-7.00\n10/03/2026,DUNKIN CREDIT,-7.00\n';

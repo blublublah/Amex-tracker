@@ -335,6 +335,7 @@ export const CARDS = {
   platinum: { id: 'platinum', name: 'Platinum Card®', fee: 895 },
   business_platinum: { id: 'business_platinum', name: 'Business Platinum Card®', fee: 895 },
   gold: { id: 'gold', name: 'Gold Card', fee: 325 },
+  business_gold: { id: 'business_gold', name: 'Business Gold Card', fee: 375 },
 };
 
 const mk = (card, id, o) => ({ card, id, emoji: '', enrollment: false, guide: [], ...o });
@@ -376,6 +377,17 @@ CREDITS.push(
     summary: 'Up to $50 per half-year ($100/yr) at U.S. Resy restaurants.', terms: 'Enrollment required; 10,000+ qualifying U.S. Resy restaurants.', guide: ['Enroll, then dine at a Resy restaurant or buy a Resy gift card each half-year.'], matchers: m('(resy)', '(resy)', 5, 1000, ['resy.com']) }),
   mk('gold', 'gold_dunkin', { name: "Dunkin' Credit", brand: "Dunkin'", amount: 7, period: 'monthly', enrollment: true,
     summary: "Up to $7 per month ($84/yr) at U.S. Dunkin' locations.", terms: "Enrollment required; U.S. Dunkin' locations.", guide: ["Enroll, then pay at Dunkin' with the card (in-store or app)."], matchers: m("(dunkin)", "(dunkin)", 2, 100, ['dunkindonuts.com']) }),
+);
+CREDITS.push(
+  mk('business_gold', 'bg_flex', { name: 'Flexible Business Credit', brand: 'Grubhub, office supply stores, UPS.com', amount: 20, period: 'monthly', enrollment: true,
+    summary: 'Up to $20 per month ($240/yr) at Grubhub, office supply stores and UPS.com.', terms: 'Enrollment required. U.S. purchases only at Grubhub, office supply stores and shipments at UPS.com.',
+    guide: ['Enroll, then buy office supplies, ship with UPS.com or order Grubhub each month.', 'Resets monthly and does not roll over.'], matchers: m('(flexible business|business credit)', '(grubhub|office depot|officemax|staples|ups\\.com|ups store|the ups store)', 5, 1000, ['grubhub.com', 'ups.com', 'staples.com']) }),
+  mk('business_gold', 'bg_chatgpt', { name: 'ChatGPT Business Credit', brand: 'OpenAI', amount: 300, period: 'annual', enrollment: true,
+    summary: 'Up to $300 per calendar year on U.S. ChatGPT Business purchases.', terms: 'Enrollment required; auto-renewing ChatGPT Business subscription.', guide: ['Enroll, then pay your ChatGPT Business subscription with the card.'], matchers: m('(openai|chatgpt)', '(openai|chatgpt)', 10, 2000, ['openai.com']) }),
+  mk('business_gold', 'bg_squarespace', { name: 'Squarespace Credit', brand: 'Squarespace', amount: 150, period: 'annual', enrollment: true,
+    summary: 'Up to $150 per calendar year on U.S. Squarespace purchases.', terms: 'Enrollment required; U.S. purchases with Squarespace (subscriptions auto-renew).', guide: ['Enroll, then pay your Squarespace plan or domain with the card.'], matchers: m('(squarespace)', '(squarespace)', 5, 2000, ['squarespace.com']) }),
+  mk('business_gold', 'bg_walmart', { name: 'Walmart+ Credit', brand: 'Walmart+ membership', amount: 12.95, period: 'monthly',
+    summary: 'Up to $12.95/month plus tax (~$155/yr) toward Walmart+.', terms: 'One monthly Walmart+ membership paid with the card; Plus Ups excluded.', guide: ['Put the monthly Walmart+ membership on this card.'], matchers: m('(walmart\\s*\\+|walmart plus)', '(walmart\\s*\\+|walmart plus|walmart\\+)', 10, 20, ['walmart.com']) }),
 );
 for (const c of CREDITS) c.card ||= 'platinum';
 
