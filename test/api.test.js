@@ -125,3 +125,18 @@ test('multiple cards: credits, fee total and card-scoped CSV matching', async ()
   s = (await call('/api/state?year=2026')).body;
   assert.equal(s.credits.find((c) => c.id === 'gold_dunkin').periods[9].done, true);
 });
+
+test('email verification gates reminder email', async () => {
+  cookie = '';
+  await call('/api/auth/signup', 'POST', { email: 'verify@b.co', password: 'verify me please 1', tz: 'America/New_York' });
+  assert.equal((await call('/api/state')).body.user.emailVerified, false);
+  const r = await call('/api/reminders/test', 'POST', {});
+  assert.equal(r.status, 200);
+  const log = fs.readFileSync(path.join(process.env.DATA_DIR, 'outbox.log'), 'utf8');
+  assert.match(log, /Confirm your email/);
+  assert.ok(!/→ verify@b\.co\nSubject: \d+ Platinum/.test(log), 'no reminder digest to unverified address');
+  const token = log.match(/#verify=([\w-]+)/g).pop().split('=')[1];
+  assert.equal((await call('/api/auth/verify', 'POST', { token })).status, 200);
+  assert.equal((await call('/api/state')).body.user.emailVerified, true);
+  assert.equal((await call('/api/auth/verify', 'POST', { token })).status, 400);
+});

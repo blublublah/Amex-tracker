@@ -79,7 +79,7 @@ function auth(req, res, next) {
 const cardsOf = (u) => { try { const c = JSON.parse(u.cards || '["platinum"]').filter((x) => CARDS[x]); return c.length ? c : ['platinum']; } catch { return ['platinum']; } };
 const leadDaysOf = (u) => ({ ...DEFAULT_LEAD_DAYS, ...(u.lead_days ? JSON.parse(u.lead_days) : {}) });
 const publicUser = (u) => ({
-  email: u.email, renewalDate: u.renewal_date || '', cards: cardsOf(u), ntfyTopic: u.ntfy_topic || '', tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
+  email: u.email, emailVerified: !!u.email_verified, renewalDate: u.renewal_date || '', cards: cardsOf(u), ntfyTopic: u.ntfy_topic || '', tz: u.tz, remindHour: u.remind_hour, emailReminders: !!u.email_reminders,
   leadDays: leadDaysOf(u), calendarUrl: `${BASE_URL}/cal/${u.cal_token}.ics`,
 });
 
@@ -175,6 +175,27 @@ function ingest(user, detections, { autoSpend = false } = {}) {
 // ---------- auth ----------
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length < 255;
 
+async function sendVerification(u) {
+  const token = randomToken();
+  q.run('DELETE FROM verify_tokens WHERE user_id=?', u.id);
+  q.run('INSERT INTO verify_tokens(token_hash,user_id,expires_at) VALUES (?,?,?)', sha256(token), u.id, Date.now() + 7 * 864e5);
+  await sendMail({ to: u.email, subject: 'Confirm your email for Platinum Credit Tracker', text: `Confirm your email so reminders can reach you:\n${BASE_URL}/#verify=${token}\n\nIf you did not create this account, ignore this email.` });
+}
+
+app.post('/api/auth/verify', limit(20), (req, res) => {
+  const r = q.get('SELECT * FROM verify_tokens WHERE token_hash=? AND expires_at>?', sha256(String(req.body?.token || '')), Date.now());
+  if (!r) return bad(res, 'This confirmation link is invalid or has expired.');
+  q.run('UPDATE users SET email_verified=1 WHERE id=?', r.user_id);
+  q.run('DELETE FROM verify_tokens WHERE user_id=?', r.user_id);
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/resend', auth, limit(3, 60 * 60 * 1000), wrap(async (req, res) => {
+  if (req.user.email_verified) return res.json({ ok: true });
+  await sendVerification(req.user);
+  res.json({ ok: true });
+}));
+
 app.post('/api/auth/signup', limit(10), (req, res) => {
   const { email, password, tz } = req.body || {};
   const em = String(email || '').trim().toLowerCase();
@@ -182,7 +203,9 @@ app.post('/api/auth/signup', limit(10), (req, res) => {
   if (String(password || '').length < 10) return bad(res, 'Password must be at least 10 characters.');
   if (q.get('SELECT 1 x FROM users WHERE email=?', em)) return bad(res, 'An account with that email already exists.', 409);
   const info = q.run('INSERT INTO users(email,pw_hash,tz,cal_token) VALUES (?,?,?,?)', em, hashPassword(password), isValidTz(tz) ? tz : 'America/New_York', randomToken(24));
-  startSession(res, Number(info.lastInsertRowid));
+  const uid = Number(info.lastInsertRowid);
+  sendVerification(q.get('SELECT * FROM users WHERE id=?', uid)).catch((e) => console.error('verify mail failed', e.message));
+  startSession(res, uid);
   res.json({ ok: true });
 });
 
@@ -217,7 +240,7 @@ app.post('/api/auth/reset', limit(10), (req, res) => {
   if (String(password || '').length < 10) return bad(res, 'Password must be at least 10 characters.');
   const r = q.get('SELECT * FROM reset_tokens WHERE token_hash=? AND expires_at>?', sha256(String(token || '')), Date.now());
   if (!r) return bad(res, 'This reset link is invalid or has expired.');
-  q.run('UPDATE users SET pw_hash=? WHERE id=?', hashPassword(password), r.user_id);
+  q.run('UPDATE users SET pw_hash=?, email_verified=1 WHERE id=?', hashPassword(password), r.user_id);
   q.run('DELETE FROM reset_tokens WHERE user_id=?', r.user_id);
   q.run('DELETE FROM sessions WHERE user_id=?', r.user_id);
   startSession(res, r.user_id);
@@ -399,7 +422,7 @@ async function runDigest(user, { force = false, now = new Date() } = {}) {
   if (!due.length && !renewal) return { sent: false, count: 0 };
   if (renewal) markSent.push(...renewal.markSent);
   const mail = digestEmail(due, BASE_URL, renewal?.text);
-  if (user.email_reminders || force) await sendMail({ to: user.email, ...mail });
+  if ((user.email_reminders || force) && user.email_verified) await sendMail({ to: user.email, ...mail }); // never mail unconfirmed addresses
   if (user.ntfy_topic) {
     await sendPush(user.ntfy_topic, { title: `${due.length} Platinum credit${due.length > 1 ? 's' : ''} to use`, message: due.slice(0, 6).map((d) => `${d.name}: $${d.remaining.toFixed(0)} left, ${d.daysLeft === 0 ? 'last day' : d.daysLeft + 'd'}`).join('\n'), click: BASE_URL }).catch((e) => console.error('push failed', e.message));
   }

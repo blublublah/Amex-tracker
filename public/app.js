@@ -9,6 +9,7 @@ let route = 'now';
 let year = null;
 let flash = null;
 let authMode = 'login';
+let holdFlash = false; // keep a message set during startup (e.g. email confirmed) through the first route render
 
 async function api(path, method = 'GET', body) {
   const r = await fetch(path, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -44,7 +45,7 @@ function render() {
       <nav aria-label="Main">${nav.map(([k, l]) => `<a href="#${k}" class="${route === k ? 'on' : ''}">${l}${k === 'detected' && S.pendingDetections ? `<span class="badge">${S.pendingDetections}</span>` : ''}</a>`).join('')}</nav>
       <div class="who"><span>${esc(S.user.email)}</span><button data-act="logout">Sign out</button></div>
     </div></header>
-    <main>${flash ? `<div class="msg ${flash.err ? 'err' : ''}" role="status">${esc(flash.text)}</div>` : ''}${(views[route] || viewNow)()}</main>`;
+    <main>${!S.user.emailVerified ? `<div class="msg" role="status">Please confirm your email so reminders can reach you. <button class="link" data-act="resend">Resend the link</button></div>` : ''}${flash ? `<div class="msg ${flash.err ? 'err' : ''}" role="status">${esc(flash.text)}</div>` : ''}${(views[route] || viewNow)()}</main>`;
   document.querySelectorAll('[data-w]').forEach((el) => { el.style.width = el.dataset.w + '%'; });
   if (route === 'connect') refreshGmail();
 }
@@ -294,6 +295,7 @@ document.addEventListener('click', async (e) => {
       const cards = [...document.querySelectorAll('[data-card]')].filter((i) => i.checked).map((i) => i.dataset.card);
       await api('/api/settings', 'PUT', { cards }); await load(); return say('Cards updated.');
     }
+    if (act === 'resend') { await api('/api/auth/resend', 'POST', {}); return say('Confirmation link sent. Check your inbox.'); }
     if (act === 'welcomed') { localStorage.setItem('welcomed', '1'); return render(); }
     if (act === 'logout') { await api('/api/auth/logout', 'POST', {}); S = null; flash = null; return render(); }
     if (act === 'year') { year = S.year + Number(t.dataset.d); return load(); }
@@ -356,18 +358,29 @@ document.addEventListener('submit', async (e) => {
   try { await api('/api/entries', 'POST', { creditId: f.dataset.id, periodKey: f.dataset.key, amount }); await load(); } catch (err) { say(err.message, true); }
 });
 
+async function checkVerifyLink() {
+  const t = (location.hash.match(/verify=([\w-]+)/) || [])[1];
+  if (!t) return;
+  history.replaceState(null, '', '#now');
+  try { await api('/api/auth/verify', 'POST', { token: t }); flash = { text: 'Email confirmed. Reminders are on.' }; } catch (e) { flash = { text: e.message, err: true }; }
+  holdFlash = true;
+  await load();
+}
 function onHash() {
+  if (S && location.hash.includes('verify=')) { checkVerifyLink(); return; }
   const h = location.hash.replace('#', '').split('=')[0];
   if (['now', 'year', 'detected', 'connect', 'guides', 'settings'].includes(h)) route = h;
   if (location.hash.startsWith('#gmail=')) {
     flash = location.hash.includes('connected') ? { text: 'Gmail connected. Run a scan to look for credits.' } : { text: 'Gmail connection failed. Please try again.', err: true };
     route = 'connect';
     history.replaceState(null, '', '#connect');
-  } else if (h !== 'reset') flash = null;
+  } else if (h !== 'reset' && !holdFlash) flash = null;
+  holdFlash = false;
   render();
   if (S && route === 'detected') loadDetections();
 }
 window.addEventListener('hashchange', onHash);
+await checkVerifyLink();
 await load();
 onHash();
 

@@ -16,8 +16,11 @@ for (let i = 0; i < 40; i++) {
 }
 const b = await chromium.launch();
 try {
-  const p = await b.newPage();
+  const ctx = await b.newContext();
+  const p = await ctx.newPage();
   const errors = [];
+  p.on('response', (r) => { if (process.env.DEBUG && r.url().includes('/api/auth')) console.log('RESP', r.status(), r.url()); });
+  p.on('console', (m) => { if (process.env.DEBUG) console.log('CONSOLE', m.text()); });
   p.on('pageerror', (e) => errors.push(e.message));
   await p.goto(`http://localhost:${port}/`);
   await p.click('[data-act=mode][data-m=signup]');
@@ -32,9 +35,15 @@ try {
   await p.setInputFiles('#csvfile', path.join(dir, 'a.csv'));
   await p.click('[data-act=importcsv]');
   await p.waitForSelector('.msg');
+  const tok = fs.readFileSync(path.join(dir, 'outbox.log'), 'utf8').match(/#verify=([\w-]+)/)[1];
+  // open the emailed link the way a user would: in a fresh tab
+  const p2 = await ctx.newPage();
+  await p2.goto(`http://localhost:${port}/#verify=${tok}`);
+  await p2.waitForSelector('text=Email confirmed');
+  await p2.close();
   await p.goto(`http://localhost:${port}/#settings`);
   await p.click('[data-act=testmail]');
-  await p.waitForSelector('.msg');
+  await p.waitForSelector('text=Test digest sent');
   const outbox = fs.readFileSync(path.join(dir, 'outbox.log'), 'utf8');
   assert.match(outbox, /Platinum credit/);
   assert.deepEqual(errors, []);
